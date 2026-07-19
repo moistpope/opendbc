@@ -4,7 +4,7 @@ from enum import IntFlag
 from opendbc.car import Bus, CarSpecs, PlatformConfig, Platforms
 from opendbc.car.structs import CarParams
 from opendbc.car.docs_definitions import CarDocs, CarParts, CarHarness, SupportType
-from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
+from opendbc.car.fw_query_definitions import FwQueryConfig
 
 Ecu = CarParams.Ecu
 
@@ -54,24 +54,16 @@ class CAR(Platforms):
   )
 
 
-# Fisker ECUs answer standard UDS ReadDataByIdentifier on the DIAG bus:
-#   0xF187 spare-part number, 0xF188 software number, 0xF191 hardware number
-# (see _reference/ecus.json). The DIAG bus is physically the comma's can3/OBD-II
-# transceiver; queries are sent on panda bus 0 here as a starting point.
-FW_QUERY_CONFIG = FwQueryConfig(
-  requests=[
-    Request(
-      [StdQueries.TESTER_PRESENT_REQUEST, StdQueries.MANUFACTURER_SOFTWARE_VERSION_REQUEST],
-      [StdQueries.TESTER_PRESENT_RESPONSE, StdQueries.MANUFACTURER_SOFTWARE_VERSION_RESPONSE],
-      bus=0,
-    ),
-    Request(
-      [StdQueries.TESTER_PRESENT_REQUEST, StdQueries.MANUFACTURER_ECU_HARDWARE_NUMBER_REQUEST],
-      [StdQueries.TESTER_PRESENT_RESPONSE, StdQueries.MANUFACTURER_ECU_HARDWARE_NUMBER_RESPONSE],
-      bus=0,
-    ),
-  ],
-)
+# No FW-version fingerprinting yet: FW_VERSIONS is empty and the Ocean is identified by its CAN
+# message set (see fingerprints.py). The requests list MUST stay empty until FW_VERSIONS is
+# populated -- a brand with requests but no offline FW versions makes get_brand_ecu_matches return
+# an empty match list and get_fw_versions_ordered() crashes with ZeroDivisionError. The config is
+# still declared (not omitted) because other code indexes FW_QUERY_CONFIGS['fisker'].
+#
+# TODO: once ECU FW is captured on the DIAG bus, add FW_VERSIONS entries AND the matching requests:
+#   0xF187 spare-part number, 0xF188 software number, 0xF191 hardware number (see _reference/ecus.json),
+#   e.g. StdQueries.MANUFACTURER_SOFTWARE_VERSION_REQUEST / MANUFACTURER_ECU_HARDWARE_NUMBER_REQUEST.
+FW_QUERY_CONFIG = FwQueryConfig(requests=[])
 
 # steering torque (STEERING_WHEEL1->STEERING_WHEEL_INPUT_TORQUE) above which the driver
 # is considered to be overriding. TODO: calibrate against real data

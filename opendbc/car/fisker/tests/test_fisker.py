@@ -27,6 +27,16 @@ class TestFiskerInterface:
   def test_carstate_parsers_build(self):
     CarState.get_can_parsers(_ocean_cp())
 
+  def test_fw_query_does_not_crash_with_empty_versions(self):
+    # regression: a brand with FW requests but empty FW_VERSIONS makes get_brand_ecu_matches
+    # return an empty list for fisker and get_fw_versions_ordered() divides by zero. Keeping
+    # requests empty removes fisker from the FW-query loop entirely.
+    from opendbc.car.fw_versions import get_brand_ecu_matches, FW_QUERY_CONFIGS
+    assert "fisker" in FW_QUERY_CONFIGS  # must stay registered (other code indexes it)
+    matches = get_brand_ecu_matches(set())
+    for brand, lst in matches.items():
+      assert len(lst) > 0, f"{brand} has an empty match list (would ZeroDivisionError)"
+
   def test_fingerprint_present_and_addressable(self):
     fp = FINGERPRINTS[CAR.FISKER_OCEAN][0]
     assert len(fp) > 50
