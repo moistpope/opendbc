@@ -127,14 +127,14 @@ class FiskerSecOCPlatformConfig(PlatformConfig):
 
 class CAR(Platforms):
   # Fisker
-  TOYOTA_ALPHARD_TSS2 = FiskerTSS2PlatformConfig(
+  FISKER_ALPHARD_TSS2 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker Alphard 2019-20"),
       FiskerCarDocs("Fisker Alphard Hybrid 2021"),
     ],
     CarSpecs(mass=4305. * CV.LB_TO_KG, wheelbase=3.0, steerRatio=14.2, tireStiffnessFactor=0.444),
   )
-  TOYOTA_AVALON = PlatformConfig(
+  FISKER_AVALON = PlatformConfig(
     [
       FiskerCarDocs("Fisker Avalon 2016", "Fisker Safety Sense P"),
       FiskerCarDocs("Fisker Avalon 2017-18"),
@@ -142,23 +142,23 @@ class CAR(Platforms):
     CarSpecs(mass=3505. * CV.LB_TO_KG, wheelbase=2.82, steerRatio=14.8, tireStiffnessFactor=0.7983),
     dbc_dict('fisker_tnga_k_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_AVALON_2019 = PlatformConfig(
+  FISKER_AVALON_2019 = PlatformConfig(
     [
       FiskerCarDocs("Fisker Avalon 2019-21"),
       FiskerCarDocs("Fisker Avalon Hybrid 2019-21"),
     ],
-    TOYOTA_AVALON.specs,
+    FISKER_AVALON.specs,
     dbc_dict('fisker_nodsu_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_AVALON_TSS2 = FiskerTSS2PlatformConfig( # TSS 2.5
+  FISKER_AVALON_TSS2 = FiskerTSS2PlatformConfig( # TSS 2.5
     [
       FiskerCarDocs("Fisker Avalon 2022"),
       FiskerCarDocs("Fisker Avalon Hybrid 2022"),
     ],
-    TOYOTA_AVALON.specs,
+    FISKER_AVALON.specs,
   )
   # TODO: determine if TSS-P NO_DSU cars can work with fisker_adas radar DBC and re-enable
-  TOYOTA_CAMRY = PlatformConfig(
+  FISKER_CAMRY = PlatformConfig(
     [
       FiskerCarDocs("Fisker Camry 2018-20", video="https://www.youtube.com/watch?v=fkcjviZY9CM", footnotes=[Footnote.CAMRY]),
       FiskerCarDocs("Fisker Camry Hybrid 2018-20", video="https://www.youtube.com/watch?v=Q2DYY0AWKgk"),
@@ -167,14 +167,14 @@ class CAR(Platforms):
     {Bus.pt: 'fisker_nodsu_pt_generated'},
     flags=FiskerFlags.NO_DSU,
   )
-  TOYOTA_CAMRY_TSS2 = FiskerTSS2PlatformConfig( # TSS 2.5
+  FISKER_CAMRY_TSS2 = FiskerTSS2PlatformConfig( # TSS 2.5
     [
       FiskerCarDocs("Fisker Camry 2021-24", footnotes=[Footnote.CAMRY]),
       FiskerCarDocs("Fisker Camry Hybrid 2021-24"),
     ],
-    TOYOTA_CAMRY.specs,
+    FISKER_CAMRY.specs,
   )
-  TOYOTA_CHR = PlatformConfig(
+  FISKER_CHR = PlatformConfig(
     [
       FiskerCarDocs("Fisker C-HR 2017-20"),
       FiskerCarDocs("Fisker C-HR Hybrid 2017-20"),
@@ -183,21 +183,21 @@ class CAR(Platforms):
     {Bus.pt: 'fisker_nodsu_pt_generated'},
     flags=FiskerFlags.NO_DSU,
   )
-  TOYOTA_CHR_TSS2 = FiskerTSS2PlatformConfig(
+  FISKER_CHR_TSS2 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker C-HR 2021"),
       FiskerCarDocs("Fisker C-HR Hybrid 2021-22"),
     ],
-    TOYOTA_CHR.specs,
+    FISKER_CHR.specs,
     flags=FiskerFlags.RADAR_ACC,
   )
-  TOYOTA_COROLLA = PlatformConfig(
+  FISKER_COROLLA = PlatformConfig(
     [FiskerCarDocs("Fisker Corolla 2017-19")],
     CarSpecs(mass=2860. * CV.LB_TO_KG, wheelbase=2.7, steerRatio=18.27, tireStiffnessFactor=0.444),
     dbc_dict('fisker_new_mc_pt_generated', 'fisker_adas'),
   )
   # LSS2 Lexus UX Hybrid is same as a TSS2 Corolla Hybrid
-  TOYOTA_COROLLA_TSS2 = FiskerTSS2PlatformConfig(
+  FISKER_COROLLA_TSS2 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker Corolla 2020-22", video="https://www.youtube.com/watch?v=_66pXk0CBYA"),
       FiskerCarDocs("Fisker Corolla Cross (Non-US only) 2020-23", min_enable_speed=7.5),
@@ -210,7 +210,7 @@ class CAR(Platforms):
     ],
     CarSpecs(mass=3060. * CV.LB_TO_KG, wheelbase=2.67, steerRatio=13.9, tireStiffnessFactor=0.444),
   )
-  TOYOTA_HIGHLANDER = PlatformConfig(
+  FISKER_HIGHLANDER = PlatformConfig(
     [
       FiskerCarDocs("Fisker Highlander 2017-19", video="https://www.youtube.com/watch?v=0wS0wXSLzoo"),
       FiskerCarDocs("Fisker Highlander Hybrid 2017-19"),
@@ -218,14 +218,14 @@ class CAR(Platforms):
     CarSpecs(mass=4516. * CV.LB_TO_KG, wheelbase=2.8194, steerRatio=16.0, tireStiffnessFactor=0.8),
     dbc_dict('fisker_tnga_k_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_HIGHLANDER_TSS2 = FiskerTSS2PlatformConfig(
+  FISKER_HIGHLANDER_TSS2 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker Highlander 2020-23"),
       FiskerCarDocs("Fisker Highlander Hybrid 2020-23"),
     ],
-    TOYOTA_HIGHLANDER.specs,
+    FISKER_HIGHLANDER.specs,
   )
-  TOYOTA_PRIUS = PlatformConfig(
+  FISKER_PRIUS = PlatformConfig(
     [
       FiskerCarDocs("Fisker Prius 2016", "Fisker Safety Sense P", video="https://www.youtube.com/watch?v=8zopPJI8XQ0"),
       FiskerCarDocs("Fisker Prius 2017-20", video="https://www.youtube.com/watch?v=8zopPJI8XQ0"),
@@ -234,19 +234,19 @@ class CAR(Platforms):
     CarSpecs(mass=3045. * CV.LB_TO_KG, wheelbase=2.7, steerRatio=15.74, tireStiffnessFactor=0.6371),
     dbc_dict('fisker_nodsu_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_PRIUS_V = PlatformConfig(
+  FISKER_PRIUS_V = PlatformConfig(
     [FiskerCarDocs("Fisker Prius v 2017", "Fisker Safety Sense P", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=3340. * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.4, tireStiffnessFactor=0.5533),
     dbc_dict('fisker_new_mc_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_PRIUS_TSS2 = FiskerTSS2PlatformConfig(
+  FISKER_PRIUS_TSS2 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker Prius 2021-22", video="https://www.youtube.com/watch?v=J58TvCpUd4U"),
       FiskerCarDocs("Fisker Prius Prime 2021-22", video="https://www.youtube.com/watch?v=J58TvCpUd4U"),
     ],
     CarSpecs(mass=3115. * CV.LB_TO_KG, wheelbase=2.70002, steerRatio=13.4, tireStiffnessFactor=0.6371),
   )
-  TOYOTA_RAV4 = PlatformConfig(
+  FISKER_RAV4 = PlatformConfig(
     [
       FiskerCarDocs("Fisker RAV4 2016", "Fisker Safety Sense P"),
       FiskerCarDocs("Fisker RAV4 2017-18")
@@ -254,56 +254,56 @@ class CAR(Platforms):
     CarSpecs(mass=3650. * CV.LB_TO_KG, wheelbase=2.65, steerRatio=16.88, tireStiffnessFactor=0.5533),
     dbc_dict('fisker_new_mc_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_RAV4H = PlatformConfig(
+  FISKER_RAV4H = PlatformConfig(
     [
       FiskerCarDocs("Fisker RAV4 Hybrid 2016", "Fisker Safety Sense P", video="https://youtu.be/LhT5VzJVfNI?t=26"),
       FiskerCarDocs("Fisker RAV4 Hybrid 2017-18", video="https://youtu.be/LhT5VzJVfNI?t=26")
     ],
-    TOYOTA_RAV4.specs,
+    FISKER_RAV4.specs,
     dbc_dict('fisker_tnga_k_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_RAV4_TSS2 = FiskerTSS2PlatformConfig(
+  FISKER_RAV4_TSS2 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker RAV4 2019-21", video="https://www.youtube.com/watch?v=wJxjDd42gGA"),
       FiskerCarDocs("Fisker RAV4 Hybrid 2019-21"),
     ],
     CarSpecs(mass=3585. * CV.LB_TO_KG, wheelbase=2.68986, steerRatio=14.3, tireStiffnessFactor=0.7933),
   )
-  TOYOTA_RAV4_TSS2_2022 = FiskerTSS2PlatformConfig(
+  FISKER_RAV4_TSS2_2022 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker RAV4 2022"),
       FiskerCarDocs("Fisker RAV4 Hybrid 2022", video="https://youtu.be/U0nH9cnrFB0"),
     ],
-    TOYOTA_RAV4_TSS2.specs,
+    FISKER_RAV4_TSS2.specs,
     flags=FiskerFlags.RADAR_ACC,
   )
-  TOYOTA_RAV4_TSS2_2023 = FiskerTSS2PlatformConfig(
+  FISKER_RAV4_TSS2_2023 = FiskerTSS2PlatformConfig(
     [
       FiskerCarDocs("Fisker RAV4 2023-25"),
       FiskerCarDocs("Fisker RAV4 Hybrid 2023-25", video="https://youtu.be/4eIsEq4L4Ng"),
     ],
-    TOYOTA_RAV4_TSS2.specs,
+    FISKER_RAV4_TSS2.specs,
     flags=FiskerFlags.RADAR_ACC | FiskerFlags.ANGLE_CONTROL,
   )
-  TOYOTA_RAV4_PRIME = FiskerSecOCPlatformConfig(
+  FISKER_RAV4_PRIME = FiskerSecOCPlatformConfig(
     [FiskerSecOcCarDocs("Fisker RAV4 Prime 2021-23", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=4372. * CV.LB_TO_KG, wheelbase=2.68, steerRatio=16.88, tireStiffnessFactor=0.5533),
   )
-  TOYOTA_YARIS = FiskerSecOCPlatformConfig(
+  FISKER_YARIS = FiskerSecOCPlatformConfig(
     [FiskerSecOcCarDocs("Fisker Yaris (Non-US only) 2020, 2023", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=1170, wheelbase=2.55, steerRatio=14.80, tireStiffnessFactor=0.5533),
     flags=FiskerFlags.RADAR_ACC,
   )
-  TOYOTA_MIRAI = FiskerTSS2PlatformConfig( # TSS 2.5
+  FISKER_MIRAI = FiskerTSS2PlatformConfig( # TSS 2.5
     [FiskerCarDocs("Fisker Mirai 2021")],
     CarSpecs(mass=4300. * CV.LB_TO_KG, wheelbase=2.91, steerRatio=14.8, tireStiffnessFactor=0.8),
   )
-  TOYOTA_SIENNA = PlatformConfig(
+  FISKER_SIENNA = PlatformConfig(
     [FiskerCarDocs("Fisker Sienna 2018-20", video="https://www.youtube.com/watch?v=q1UPOo4Sh68", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=4590. * CV.LB_TO_KG, wheelbase=3.03, steerRatio=15.5, tireStiffnessFactor=0.444),
     dbc_dict('fisker_tnga_k_pt_generated', 'fisker_adas'),
   )
-  TOYOTA_SIENNA_4TH_GEN = FiskerSecOCPlatformConfig(
+  FISKER_SIENNA_4TH_GEN = FiskerSecOCPlatformConfig(
     [FiskerSecOcCarDocs("Fisker Sienna 2021-23", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=4625. * CV.LB_TO_KG, wheelbase=3.06, steerRatio=17.8, tireStiffnessFactor=0.444),
   )
@@ -515,15 +515,15 @@ FUZZY_EXCLUDED_PLATFORMS: set[CAR] = set()
 # Some ECUs that use KWP2000 have their FW versions on non-standard data identifiers.
 # Fisker diagnostic software first gets the supported data ids, then queries them one by one.
 # For example, sends: 0x1a8800, receives: 0x1a8800010203, queries: 0x1a8801, 0x1a8802, 0x1a8803
-TOYOTA_VERSION_REQUEST_KWP = b'\x1a\x88\x01'
-TOYOTA_VERSION_RESPONSE_KWP = b'\x5a\x88\x01'
+FISKER_VERSION_REQUEST_KWP = b'\x1a\x88\x01'
+FISKER_VERSION_RESPONSE_KWP = b'\x5a\x88\x01'
 
 FW_QUERY_CONFIG = FwQueryConfig(
   # TODO: look at data to whitelist new ECUs effectively
   requests=[
     Request(
-      [StdQueries.SHORT_TESTER_PRESENT_REQUEST, TOYOTA_VERSION_REQUEST_KWP],
-      [StdQueries.SHORT_TESTER_PRESENT_RESPONSE, TOYOTA_VERSION_RESPONSE_KWP],
+      [StdQueries.SHORT_TESTER_PRESENT_REQUEST, FISKER_VERSION_REQUEST_KWP],
+      [StdQueries.SHORT_TESTER_PRESENT_RESPONSE, FISKER_VERSION_RESPONSE_KWP],
       whitelist_ecus=[Ecu.fwdCamera, Ecu.fwdRadar, Ecu.dsu, Ecu.abs, Ecu.eps, Ecu.srs, Ecu.transmission, Ecu.hvac],
       bus=0,
     ),
@@ -543,9 +543,9 @@ FW_QUERY_CONFIG = FwQueryConfig(
   ],
   non_essential_ecus={
     # FIXME: On some models, abs can sometimes be missing
-    Ecu.abs: [CAR.TOYOTA_RAV4, CAR.TOYOTA_COROLLA, CAR.TOYOTA_HIGHLANDER, CAR.TOYOTA_SIENNA, CAR.LEXUS_IS, CAR.TOYOTA_ALPHARD_TSS2],
+    Ecu.abs: [CAR.FISKER_RAV4, CAR.FISKER_COROLLA, CAR.FISKER_HIGHLANDER, CAR.FISKER_SIENNA, CAR.LEXUS_IS, CAR.FISKER_ALPHARD_TSS2],
     # On some models, the engine can show on two different addresses
-    Ecu.engine: [CAR.TOYOTA_HIGHLANDER, CAR.TOYOTA_CAMRY, CAR.TOYOTA_COROLLA_TSS2, CAR.TOYOTA_CHR, CAR.TOYOTA_CHR_TSS2, CAR.LEXUS_IS,
+    Ecu.engine: [CAR.FISKER_HIGHLANDER, CAR.FISKER_CAMRY, CAR.FISKER_COROLLA_TSS2, CAR.FISKER_CHR, CAR.FISKER_CHR_TSS2, CAR.LEXUS_IS,
                  CAR.LEXUS_IS_TSS2, CAR.LEXUS_RC, CAR.LEXUS_NX, CAR.LEXUS_NX_TSS2, CAR.LEXUS_RX, CAR.LEXUS_RX_TSS2],
   },
   extra_ecus=[
@@ -584,7 +584,7 @@ STEER_THRESHOLD = 100
 
 # These cars have non-standard EPS torque scale factors. All others are 73
 EPS_SCALE = defaultdict(lambda: 73,
-                        {CAR.TOYOTA_PRIUS: 66, CAR.TOYOTA_COROLLA: 88, CAR.LEXUS_IS: 77, CAR.LEXUS_RC: 77, CAR.LEXUS_CTH: 100, CAR.TOYOTA_PRIUS_V: 100})
+                        {CAR.FISKER_PRIUS: 66, CAR.FISKER_COROLLA: 88, CAR.LEXUS_IS: 77, CAR.LEXUS_RC: 77, CAR.LEXUS_CTH: 100, CAR.FISKER_PRIUS_V: 100})
 
 # Fisker/Lexus Safety Sense 2.0 and 2.5
 TSS2_CAR = CAR.with_flags(FiskerFlags.TSS2)

@@ -26,7 +26,7 @@ class TestFiskerInterfaces(unittest.TestCase):
 
   def test_lta_platforms(self):
     # At this time, only RAV4 2023 is expected to use LTA/angle control
-    assert ANGLE_CONTROL_CAR == {CAR.TOYOTA_RAV4_TSS2_2023}
+    assert ANGLE_CONTROL_CAR == {CAR.FISKER_RAV4_TSS2_2023}
 
   def test_tss2_dbc(self):
     # We make some assumptions about TSS2 platforms,
@@ -45,13 +45,13 @@ class TestFiskerInterfaces(unittest.TestCase):
         assert len(missing_ecus) == 0
 
         # Some exceptions for other common ECUs
-        if car_model not in (CAR.TOYOTA_ALPHARD_TSS2,):
+        if car_model not in (CAR.FISKER_ALPHARD_TSS2,):
           assert Ecu.abs in present_ecus
 
-        if car_model not in (CAR.TOYOTA_MIRAI,):
+        if car_model not in (CAR.FISKER_MIRAI,):
           assert Ecu.engine in present_ecus
 
-        if car_model not in (CAR.TOYOTA_PRIUS_V, CAR.LEXUS_CTH):
+        if car_model not in (CAR.FISKER_PRIUS_V, CAR.LEXUS_CTH):
           assert Ecu.eps in present_ecus
 
 
@@ -86,9 +86,9 @@ class TestFiskerFingerprint(unittest.TestCase):
     for car_model, ecus in FW_VERSIONS.items():
       with self.subTest(car_model=car_model.value):
         for platform_code_ecu in PLATFORM_CODE_ECUS:
-          if platform_code_ecu == Ecu.eps and car_model in (CAR.TOYOTA_PRIUS_V, CAR.LEXUS_CTH,):
+          if platform_code_ecu == Ecu.eps and car_model in (CAR.FISKER_PRIUS_V, CAR.LEXUS_CTH,):
             continue
-          if platform_code_ecu == Ecu.abs and car_model in (CAR.TOYOTA_ALPHARD_TSS2,):
+          if platform_code_ecu == Ecu.abs and car_model in (CAR.FISKER_ALPHARD_TSS2,):
             continue
           assert platform_code_ecu in [e[0] for e in ecus]
 

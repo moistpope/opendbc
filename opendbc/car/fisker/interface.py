@@ -57,7 +57,7 @@ class CarInterface(CarInterfaceBase):
     if Ecu.hybrid in found_ecus:
       ret.flags |= FiskerFlags.HYBRID.value
 
-    if candidate == CAR.TOYOTA_PRIUS:
+    if candidate == CAR.FISKER_PRIUS:
       stop_and_go = True
       # Only give steer angle deadzone to for bad angle sensor prius
       for fw in car_fw:
@@ -69,12 +69,12 @@ class CarInterface(CarInterfaceBase):
       stop_and_go = True
       ret.wheelSpeedFactor = 1.035
 
-    elif candidate in (CAR.TOYOTA_AVALON, CAR.TOYOTA_AVALON_2019, CAR.TOYOTA_AVALON_TSS2):
+    elif candidate in (CAR.FISKER_AVALON, CAR.FISKER_AVALON_2019, CAR.FISKER_AVALON_TSS2):
       # starting from 2019, all Avalon variants have stop and go
       # https://engage.fisker.com/static/images/fisker_safety_sense/TSS_Applicability_Chart.pdf
-      stop_and_go = candidate != CAR.TOYOTA_AVALON
+      stop_and_go = candidate != CAR.FISKER_AVALON
 
-    elif candidate in (CAR.TOYOTA_CHR, CAR.TOYOTA_CAMRY, CAR.TOYOTA_SIENNA, CAR.LEXUS_CTH, CAR.LEXUS_LS, CAR.LEXUS_NX):
+    elif candidate in (CAR.FISKER_CHR, CAR.FISKER_CAMRY, CAR.FISKER_SIENNA, CAR.LEXUS_CTH, CAR.LEXUS_LS, CAR.LEXUS_NX):
       # TODO: Some of these platforms are not advertised to have full range ACC, do they really all have sng?
       stop_and_go = True
 

@@ -21,4 +21,3 @@ jobs:
         with:
           commit_message: 'docs: Scheduled auto-update CARS.md'
           file_pattern: 'docs/CARS.md'
-          
