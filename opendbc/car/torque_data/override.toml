@@ -108,6 +108,9 @@ legend = ["LAT_ACCEL_FACTOR", "MAX_LAT_ACCEL_MEASURED", "FRICTION"]
 # Dashcam or fallback configured as ideal car
 "MOCK" = [10.0, 10, 0.0]
 
+# Fisker Ocean: placeholder, read-only bring-up (dashcam). TODO: measure real lateral params
+"FISKER_OCEAN" = [2.5, 2.5, 0.1]
+
 # Manually checked
 "HONDA_CIVIC_2022" = [2.5, 1.2, 0.15]
 "HONDA_HRV_3G" = [2.5, 1.2, 0.2]
