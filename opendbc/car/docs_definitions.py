@@ -104,6 +104,8 @@ class CarHarness(EnumBase):
   bosch_c = BaseCarHarness("Honda Bosch C connector")
   toyota_a = BaseCarHarness("Toyota A connector")
   toyota_b = BaseCarHarness("Toyota B connector")
+  fisker_a = BaseCarHarness("Toyota A connector")
+  fisker_b = BaseCarHarness("Toyota B connector")
   subaru_a = BaseCarHarness("Subaru A connector", parts=[Accessory.harness_box, Accessory.comma_power, Tool.socket_8mm_deep, Tool.pry_tool])
   subaru_b = BaseCarHarness("Subaru B connector", parts=[Accessory.harness_box, Accessory.comma_power, Tool.socket_8mm_deep, Tool.pry_tool])
   subaru_c = BaseCarHarness("Subaru C connector", parts=[Accessory.harness_box, Accessory.comma_power, Tool.socket_8mm_deep, Tool.pry_tool])

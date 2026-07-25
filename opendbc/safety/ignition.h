@@ -66,6 +66,14 @@ void ignition_can_hook(const CANPacket_t *msg) {
       }
       prev_counter_vw_meb = counter;
     }
+
+    // Fisker Ocean exception
+    if ((msg->addr == 0x333U) && (len == 8)) {
+      // MAYBE_READY->MAYBE_READY: the EV is powered/ready to drive when non-zero
+      // TODO: confirm the exact "ready" value against real data
+      ignition_can = ((msg->data[2] >> 4) & 0x3U) != 0U;
+      ignition_can_cnt = 0U;
+    }
   }
 
   // TODO: this is too loose, Teslas have 0x222
