@@ -4,8 +4,7 @@ from opendbc.car.common.basedir import BASEDIR
 
 capnp.remove_import_hook()
 
-from cereal import car
-# car = capnp.load(os.path.join(BASEDIR, "car.capnp"), imports=[BASEDIR])
+car = capnp.load(os.path.join(BASEDIR, "car.capnp"), imports=[BASEDIR])
 
 CarState = car.CarState
 RadarData = car.RadarData
