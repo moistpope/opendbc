@@ -17,10 +17,11 @@ class CarInterface(CarInterfaceBase):
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
     ret.brand = "fisker"
 
-    # Early bring-up: there is no SAFETY_FISKER panda mode yet, so run read-only.
+    # Development placeholder: there is no SAFETY_FISKER panda mode yet, so use ALLOUTPUT
+    # to allow bring-up testing of long/lat control paths with provisional tuning values.
     # TODO: implement modes/fisker.h (SecOC-aware) and switch to SafetyModel.fisker.
-    ret.safetyConfigs = [get_safety_config(SafetyModel.noOutput)]
-    ret.dashcamOnly = True
+    ret.safetyConfigs = [get_safety_config(SafetyModel.allOutput)]
+    ret.dashcamOnly = False
 
     # lateral is torque-based (ADAS_STEER_CONTROL->LKAS_STEERING_TORQUE); tune is inert while read-only
     ret.steerControlType = structs.CarParams.SteerControlType.torque
@@ -35,7 +36,17 @@ class CarInterface(CarInterfaceBase):
     # radar (MRR 0x33B) is not decoded yet
     ret.radarUnavailable = True
 
-    # no ACC decoded yet -> openpilot cannot do longitudinal
-    ret.openpilotLongitudinalControl = False
+    # Placeholder long tune to keep OP long active while PAYLOAD scaling is tuned at-car.
+    ret.openpilotLongitudinalControl = True
+    ret.pcmCruise = False
+    ret.stoppingControl = True
+    ret.vEgoStarting = 0.1
+    ret.startingState = True
+    ret.minEnableSpeed = -1.0
+    ret.longitudinalTuning.kpBP = [0.0, 5.0, 15.0, 30.0]
+    ret.longitudinalTuning.kpV = [1.2, 1.0, 0.8, 0.6]
+    ret.longitudinalTuning.kiBP = [0.0, 5.0, 15.0, 30.0]
+    ret.longitudinalTuning.kiV = [0.25, 0.22, 0.18, 0.12]
+    ret.longitudinalTuning.kf = 1.0
 
     return ret

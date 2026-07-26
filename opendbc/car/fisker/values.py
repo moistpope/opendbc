@@ -9,8 +9,12 @@ from opendbc.car.fw_query_definitions import FwQueryConfig
 Ecu = CarParams.Ecu
 
 # The Fisker Ocean is a fully electric SUV. This port is an early bring-up:
-# the CAN/DBC has been largely reverse engineered (see opendbc/dbc/generator/fisker/)
-# but there is no panda safety mode yet, so the car runs read-only (SafetyModel.noOutput).
+# the CAN/DBC has been largely reverse engineered (see opendbc/dbc/generator/fisker/), and the
+# ADAS_STEER_CONTROL/ADAS_ACCEL_CONTROL frame checksum (CRC8-J1850) and SecOC MAC/freshness
+# construction are now confirmed (see opendbc/car/fisker_secoc.py and fiskercan.py). There is still
+# no panda safety mode (modes/fisker.h) though: the ACC/cruise-engagement state (ADAS_ACC 0x313)
+# isn't decoded yet and the steering/accel actuation limits are still placeholders, so the car
+# runs read-only (SafetyModel.noOutput) until those are nailed down.
 
 
 class CarControllerParams:
@@ -24,6 +28,12 @@ class CarControllerParams:
   def __init__(self, CP):
     self.ACCEL_MAX = 2.0      # m/s^2
     self.ACCEL_MIN = -3.5     # m/s^2
+    # ADAS_ACCEL_CONTROL.PAYLOAD is an unsigned 12-bit value with unknown OEM scaling.
+    # Use a centered placeholder map so 0 m/s^2 commands the midpoint.
+    self.ACCEL_PAYLOAD_MIN = 0
+    self.ACCEL_PAYLOAD_MAX = 4095
+    self.ACCEL_PAYLOAD_NEUTRAL = 2048
+    self.ACCEL_PAYLOAD_PER_MPS2 = 300.0
 
 
 class FiskerSafetyFlags(IntFlag):
@@ -68,6 +78,17 @@ FW_QUERY_CONFIG = FwQueryConfig(requests=[])
 # steering torque (STEERING_WHEEL1->STEERING_WHEEL_INPUT_TORQUE) above which the driver
 # is considered to be overriding. TODO: calibrate against real data
 STEER_THRESHOLD = 100
+
+# Placeholder ADAS_ACC states while cruise-state reverse engineering is incomplete.
+# 0 appears inactive on captures; any non-zero state is treated as available.
+ACC_UNAVAILABLE_STATES = (0,)
+ACC_ENABLED_STATES = (2, 3)
+
+# LEFT_STALK placeholder mapping to OP cruise buttons.
+# 1/2 map to down/up full presses in the DBC comments and are treated as set/resume.
+LEFT_STALK_SET = 1
+LEFT_STALK_RESUME = 2
+LEFT_STALK_CANCEL = 8
 
 SECOC_CAR = CAR.with_flags(FiskerFlags.SECOC)
 

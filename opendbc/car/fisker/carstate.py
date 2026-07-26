@@ -1,10 +1,13 @@
 import copy
 
 from opendbc.can import CANDefine, CANParser
+from opendbc.car import create_button_events
 from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.fisker.values import DBC, STEER_THRESHOLD
+from opendbc.car.fisker.values import DBC, STEER_THRESHOLD, ACC_UNAVAILABLE_STATES, ACC_ENABLED_STATES, LEFT_STALK_SET, LEFT_STALK_RESUME, LEFT_STALK_CANCEL
+
+ButtonType = structs.CarState.ButtonEvent.Type
 
 # Fisker Ocean gear comes from BCM->DRIVE_MODE_1 (1=PARK, 2=NEUTRAL, 3=REVERSE, 4=DRIVE)
 
@@ -14,6 +17,7 @@ class CarState(CarStateBase):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     self.shifter_values = can_define.dv["BCM"]["DRIVE_MODE_1"]
+    self.left_stalk = 0
 
     # raw SecOC synchronization / freshness message, forwarded to the controller
     self.secoc_synchronization = None
@@ -22,8 +26,9 @@ class CarState(CarStateBase):
     cp = can_parsers[Bus.pt]
     ret = structs.CarState()
 
-    # SecOC freshness (GW_SECOC_SYNC). Signal decoding is still being reverse engineered;
-    # forward the whole message so the controller/validator can consume it.
+    # SecOC freshness (GW_SECOC_SYNC). TRIP_CNT/RESET_CNT/AUTHENTICATOR layout is confirmed (see
+    # opendbc/car/fisker_secoc.py); forward the whole message so the controller can track resets
+    # and verify the sync MAC.
     self.secoc_synchronization = copy.copy(cp.vl["GW_SECOC_SYNC"])
 
     # speed. ESP_WHEEL_SPEED reports two wheels scaled to km/h (0.075 factor applied by the parser).
@@ -57,10 +62,20 @@ class CarState(CarStateBase):
     ret.rightBlinker = cp.vl["BCM_LIGHTS"]["RIGHT_TURN_SIGNAL_ACTIVE"] != 0
     ret.genericToggle = cp.vl["BCM_LIGHTS"]["HIGH_BEAMS_ACTIVE"] != 0
 
-    # TODO: decode the Ocean ACC state (ADAS_ACC 0x313 / ADAS_ACC_HUD 0x31C). Until then the car
-    # runs read-only (SafetyModel.noOutput) and cruise is reported unavailable.
-    ret.cruiseState.available = False
-    ret.cruiseState.enabled = False
+    # Placeholder ACC state decode: ADAS_ACC.NEW_SIGNAL_1 appears to represent ACC availability/state.
+    acc_state = int(cp.vl["ADAS_ACC"]["NEW_SIGNAL_1"])
+    ret.cruiseState.available = acc_state not in ACC_UNAVAILABLE_STATES
+    ret.cruiseState.enabled = acc_state in ACC_ENABLED_STATES
+
+    # Provisional engagement buttons from left stalk full presses.
+    prev_left_stalk = self.left_stalk
+    self.left_stalk = int(cp.vl["NEW_MSG_310"]["LEFT_STALK"])
+    button_map = {
+      LEFT_STALK_SET: ButtonType.decelCruise,
+      LEFT_STALK_RESUME: ButtonType.accelCruise,
+      LEFT_STALK_CANCEL: ButtonType.cancel,
+    }
+    ret.buttonEvents = create_button_events(self.left_stalk, prev_left_stalk, button_map)
 
     return ret
 
@@ -77,6 +92,8 @@ class CarState(CarStateBase):
       ("BCM_LIGHTS", float('nan')),
       ("PARKING_BRAKES", float('nan')),
       ("MAYBE_READY", float('nan')),
+      ("ADAS_ACC", float('nan')),
+      ("NEW_MSG_310", float('nan')),
     ]
 
     return {
