@@ -1,4 +1,4 @@
-# import os
+import os
 import capnp
 from opendbc.car.common.basedir import BASEDIR
 
