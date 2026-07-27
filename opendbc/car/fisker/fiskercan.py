@@ -61,8 +61,9 @@ def create_steer_command(packer, torque, steer_req, counter_a):
   """
   values = {
     "COUNTER_A": counter_a,
+    "UNKNOWN_CONSTANT_1": 0,
     "LKAS_STEERING_TORQUE": torque if steer_req else 0,
-    "UNKNOWN_CONSTANT": 1,
+    "UNKNOWN_CONSTANT": 3 if steer_req else 1,
   }
   return _finalize(packer.make_can_msg("ADAS_STEER_CONTROL", 0, values))
 
@@ -71,7 +72,8 @@ def create_accel_command(packer, accel_payload, counter_a, counter_b):
   """ADAS_ACCEL_CONTROL (0x121) — longitudinal command."""
   values = {
     "COUNTER_A": counter_a,
+    "UNKNOWN_CONSTANT_1": 1,
     "PAYLOAD": accel_payload,
-    "COUNTER_B": counter_b,
+    "UNKNOWN_CONSTANT": 8,
   }
   return _finalize(packer.make_can_msg("ADAS_ACCEL_CONTROL", 0, values))

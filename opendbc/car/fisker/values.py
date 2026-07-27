@@ -20,7 +20,9 @@ Ecu = CarParams.Ecu
 class CarControllerParams:
   # TODO: all steering limits are placeholders pending RE of ADAS_STEER_CONTROL scaling
   STEER_STEP = 1
-  STEER_MAX = 1000           # LKAS_STEERING_TORQUE is a 12-bit field, real max unknown
+  # LKAS_STEERING_TORQUE DBC physical range is [-192, 192].
+  STEER_MAX = 192
+  STEER_MIN = -192
   STEER_DELTA_UP = 10
   STEER_DELTA_DOWN = 25
   STEER_ERROR_MAX = 350
@@ -79,16 +81,19 @@ FW_QUERY_CONFIG = FwQueryConfig(requests=[])
 # is considered to be overriding. TODO: calibrate against real data
 STEER_THRESHOLD = 100
 
-# Placeholder ADAS_ACC states while cruise-state reverse engineering is incomplete.
-# 0 appears inactive on captures; any non-zero state is treated as available.
-ACC_UNAVAILABLE_STATES = (0,)
-ACC_ENABLED_STATES = (2, 3)
+# steering torque above which OP should disengage immediately (user disable).
+# Kept higher than STEER_THRESHOLD so light hand torque only triggers lateral override.
+STEER_DISENGAGE_THRESHOLD = 250
 
-# LEFT_STALK placeholder mapping to OP cruise buttons.
-# 1/2 map to down/up full presses in the DBC comments and are treated as set/resume.
-LEFT_STALK_SET = 1
-LEFT_STALK_RESUME = 2
-LEFT_STALK_CANCEL = 8
+# 0x358 CRUISE_CONTROL_STATUS values from DBC labels.
+# INACTIVE: cruise main off, SET: main on/armed, ACTIVE: speed-control engaged.
+CRUISE_STATUS_INACTIVE = 0
+CRUISE_STATUS_SET = 1
+CRUISE_STATUS_ACTIVE = 2
+
+# Steering wheel right-bottom button mapping.
+# Use one physical button with short press to engage and long press to cancel/disengage.
+STEERING_BTN_PRESSED = 1
 
 SECOC_CAR = CAR.with_flags(FiskerFlags.SECOC)
 

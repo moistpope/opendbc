@@ -5,7 +5,7 @@ from opendbc.car import create_button_events
 from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
-from opendbc.car.fisker.values import DBC, STEER_THRESHOLD, ACC_UNAVAILABLE_STATES, ACC_ENABLED_STATES, LEFT_STALK_SET, LEFT_STALK_RESUME, LEFT_STALK_CANCEL
+from opendbc.car.fisker.values import DBC, STEER_THRESHOLD, STEER_DISENGAGE_THRESHOLD, CRUISE_STATUS_INACTIVE, CRUISE_STATUS_SET, CRUISE_STATUS_ACTIVE, STEERING_BTN_PRESSED
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -17,7 +17,8 @@ class CarState(CarStateBase):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     self.shifter_values = can_define.dv["BCM"]["DRIVE_MODE_1"]
-    self.left_stalk = 0
+    self.right_bottom_btn = 0
+    self.right_bottom_btn_long = 0
 
     # raw SecOC synchronization / freshness message, forwarded to the controller
     self.secoc_synchronization = None
@@ -42,12 +43,13 @@ class CarState(CarStateBase):
     can_gear = int(cp.vl["BCM"]["DRIVE_MODE_1"])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
 
-    # steering. TODO: STEERING_ANGLE_ABSOLUTE is a raw 15-bit count (a real capture showed values
-    # like 12442); a scale factor and center offset still need to be reverse engineered.
+    # steering
     ret.steeringAngleDeg = cp.vl["STEERING"]["STEERING_ANGLE_ABSOLUTE"]
     ret.steeringRateDeg = cp.vl["STEERING"]["STEERING_ANGLE_RATE_OF_CHANGE"]
     ret.steeringTorque = cp.vl["STEERING_WHEEL1"]["STEERING_WHEEL_INPUT_TORQUE"]
-    ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD
+    steering_torque_abs = abs(ret.steeringTorque)
+    ret.steeringPressed = steering_torque_abs > STEER_THRESHOLD
+    ret.steeringDisengage = steering_torque_abs > STEER_DISENGAGE_THRESHOLD
 
     # pedals / brake
     ret.brakePressed = cp.vl["BCM"]["BRAKE_PRESSED_1"] != 0
@@ -62,20 +64,22 @@ class CarState(CarStateBase):
     ret.rightBlinker = cp.vl["BCM_LIGHTS"]["RIGHT_TURN_SIGNAL_ACTIVE"] != 0
     ret.genericToggle = cp.vl["BCM_LIGHTS"]["HIGH_BEAMS_ACTIVE"] != 0
 
-    # Placeholder ACC state decode: ADAS_ACC.NEW_SIGNAL_1 appears to represent ACC availability/state.
-    acc_state = int(cp.vl["ADAS_ACC"]["NEW_SIGNAL_1"])
-    ret.cruiseState.available = acc_state not in ACC_UNAVAILABLE_STATES
-    ret.cruiseState.enabled = acc_state in ACC_ENABLED_STATES
+    # Cruise state from 0x358 CRUISE_CONTROL_STATUS.
+    cruise_status = int(cp.vl["CRUISE_CONTROL_STATUS"]["CRUISE_CONTROL_STATUS"])
+    ret.cruiseState.available = cruise_status in (CRUISE_STATUS_SET, CRUISE_STATUS_ACTIVE)
+    ret.cruiseState.enabled = cruise_status == CRUISE_STATUS_ACTIVE
 
-    # Provisional engagement buttons from left stalk full presses.
-    prev_left_stalk = self.left_stalk
-    self.left_stalk = int(cp.vl["NEW_MSG_310"]["LEFT_STALK"])
-    button_map = {
-      LEFT_STALK_SET: ButtonType.decelCruise,
-      LEFT_STALK_RESUME: ButtonType.accelCruise,
-      LEFT_STALK_CANCEL: ButtonType.cancel,
-    }
-    ret.buttonEvents = create_button_events(self.left_stalk, prev_left_stalk, button_map)
+    # One-button controls: short press right-bottom to engage, long press to cancel/disengage.
+    prev_right_bottom_btn = self.right_bottom_btn
+    prev_right_bottom_btn_long = self.right_bottom_btn_long
+    self.right_bottom_btn = int(cp.vl["STEERING_WHEEL"]["STEERING_BUTTONS_RIGHT_BOTTOM"])
+    self.right_bottom_btn_long = int(cp.vl["STEERING_WHEEL"]["STEERING_BUTTONS_RIGHT_BUTTOM_LONG"])
+    ret.buttonEvents = [
+      *create_button_events(self.right_bottom_btn, prev_right_bottom_btn,
+                            {STEERING_BTN_PRESSED: ButtonType.decelCruise}),
+      *create_button_events(self.right_bottom_btn_long, prev_right_bottom_btn_long,
+                            {STEERING_BTN_PRESSED: ButtonType.cancel}),
+    ]
 
     return ret
 
@@ -92,8 +96,8 @@ class CarState(CarStateBase):
       ("BCM_LIGHTS", float('nan')),
       ("PARKING_BRAKES", float('nan')),
       ("MAYBE_READY", float('nan')),
-      ("ADAS_ACC", float('nan')),
-      ("NEW_MSG_310", float('nan')),
+      ("CRUISE_CONTROL_STATUS", float('nan')),
+      ("STEERING_WHEEL", float('nan')),
     ]
 
     return {
