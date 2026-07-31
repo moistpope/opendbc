@@ -70,19 +70,21 @@ If modules disagree, no key is stored.
 
 ## Placeholder / not production-safe yet
 
-- `allOutput` safety mode is temporary and bypasses a brand-specific panda safety policy.
+- `SAFETY_FISKER` (`opendbc/safety/modes/fisker.h`) enforces the lateral limits, but the limits
+  themselves (steer torque cap/rates, RT delta, driver-torque allowance) are provisional and the
+  driver-torque calibration is unverified.
 - ACC state decode and stalk button mapping are provisional.
 - accel payload conversion is placeholder-only.
 - steering and longitudinal limits remain placeholder values.
 - radar object tracking remains undecoded.
-- the exact bit positions of the `0x1C0` validity fields (`ADAS_LatCtrl_StsVld`/`DrvrOvrdVld`/
-  `ReqVld`) are reverse-engineered from the DTC signal names, not yet confirmed against a capture;
-  the CRC/ARC scheme carrying them is confirmed.
+- the `0x1C0` payload is confirmed from capture: idle `b2=0x48 b3=0x10`, LKAS-active `b2=0x49 b3=0x51`
+  (StsVld=`b2&0x01`, DrvrOvrdVld=`b3&0x01`, ReqVld=`b3&0x40`); the specific field-to-bit name mapping
+  is a best guess but all three flip together to "valid".
 
 ## Next Calibration Priorities
 
 1. Confirm ACC state bits in `ADAS_ACC` against live logs.
 2. Calibrate `ADAS_ACCEL_CONTROL.PAYLOAD` vs measured acceleration.
 3. Validate left-stalk cruise mapping and cancel behavior.
-4. Replace `allOutput` with a real `SAFETY_FISKER` panda mode.
+4. Tune the `SAFETY_FISKER` steering limits and driver-torque calibration against real data.
 5. Decode radar tracks and remove `radarUnavailable` stub behavior.

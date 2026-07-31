@@ -10,13 +10,12 @@ from opendbc.car.fisker.values import CarControllerParams
 
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-# NOTE: this is an early bring-up controller. It runs under SafetyModel.allOutput (development only:
-# no firmware-enforced torque/accel limits), so control is gated in software until a recovered SecOC
-# key and a verified GW_SECOC_SYNC are available. When latActive it emits both the steer command
+# NOTE: this is an early bring-up controller. It runs under SAFETY_FISKER, which torque-limits the
+# lateral takeover in firmware; control is additionally gated in software until a recovered SecOC key
+# and a verified GW_SECOC_SYNC are available. When latActive it emits both the steer command
 # (ADAS_STEER_CONTROL 0x1D0) and the authority frame (LKAS_STEER_AUTHORITY 0x1C0) the EPS requires,
 # with ARC and SecOC message counters seeded from the stock Hydra module (see secoc_mirror.py) so
 # the takeover is accepted without a counter discontinuity. Steering/accel scaling are provisional.
-# TODO: implement a real SAFETY_FISKER panda mode before enabling TX on public roads.
 
 
 class CarController(CarControllerBase):
@@ -100,7 +99,7 @@ class CarController(CarControllerBase):
 
       # LKAS_STEER_AUTHORITY (0x1C0) must be present and valid alongside the steer command or the
       # EPS rejects steering (U12F786/U12F787). Non-SecOC, its own ARC.
-      auth_addr, auth_dat, auth_bus = fiskercan.create_authority_command(self.packer, self.authority_arc)
+      auth_addr, auth_dat, auth_bus = fiskercan.create_authority_command(self.authority_arc, lat_active=True)
       can_sends.append((auth_addr, auth_dat, auth_bus))
       carlog.warning(f"fisker.controller emit authority addr=0x{auth_addr:03X} bus={auth_bus} arc={self.authority_arc} dat={auth_dat.hex()}")
       self.authority_arc = secoc_mirror.next_arc(self.authority_arc)

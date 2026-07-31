@@ -11,10 +11,9 @@ Ecu = CarParams.Ecu
 # The Fisker Ocean is a fully electric SUV. This port is an early bring-up:
 # the CAN/DBC has been largely reverse engineered (see opendbc/dbc/generator/fisker/), and the
 # ADAS_STEER_CONTROL/ADAS_ACCEL_CONTROL frame checksum (CRC8-J1850) and SecOC MAC/freshness
-# construction are now confirmed (see opendbc/car/fisker_secoc.py and fiskercan.py). There is still
-# no panda safety mode (modes/fisker.h) though: the ACC/cruise-engagement state (ADAS_ACC 0x313)
-# isn't decoded yet and the steering/accel actuation limits are still placeholders, so the car
-# runs read-only (SafetyModel.noOutput) until those are nailed down.
+# construction are now confirmed (see opendbc/car/fisker_secoc.py and fiskercan.py). The car runs
+# under SAFETY_FISKER (opendbc/safety/modes/fisker.h), which torque-limits the lateral takeover;
+# the steering/accel actuation limits it enforces are still provisional placeholders.
 
 
 class CarControllerParams:
@@ -39,9 +38,9 @@ class CarControllerParams:
 
 
 class FiskerSafetyFlags(IntFlag):
-  # Reserved for the future SAFETY_FISKER panda mode. The Ocean signs ADAS
-  # control messages with SecOC, so it will need a SecOC-aware safety mode.
-  SECOC = 1
+  # Flags for the SAFETY_FISKER panda mode (opendbc/safety/modes/fisker.h).
+  SECOC = 1         # reserved: the Ocean signs ADAS control frames with SecOC
+  LONGITUDINAL = 2  # allow openpilot longitudinal (ADAS_ACCEL_CONTROL) actuation
 
 
 class FiskerFlags(IntFlag):

@@ -20,6 +20,19 @@ class TestFiskerAuthorityCRC:
     expected = fiskercan.crc8_j1850(frame[1:4], init=0x00, xorout=0x25)
     assert fiskercan._checksum(fiskercan.ADAS_STEER_CONTROL_ADDR, frame) == expected
 
+  def test_authority_frame_bytes_match_capture(self):
+    # Active LKAS: b2=0x49 b3=0x51 (validity fields valid); idle: b2=0x48 b3=0x10. b4..b7 constant 0.
+    addr, active, bus = fiskercan.create_authority_command(0x0A, lat_active=True)
+    assert addr == 0x1C0 and bus == 0
+    assert active[1] & 0x0F == 0x0A          # ARC
+    assert active[2] == 0x49 and active[3] == 0x51
+    assert active[4:] == bytes(4)
+    assert active[0] == fiskercan.crc8_j1850(active[1:8], init=0x00, xorout=0x03)
+
+    _, idle, _ = fiskercan.create_authority_command(0x00, lat_active=False)
+    assert idle[2] == 0x48 and idle[3] == 0x10
+    assert idle[0] == fiskercan.crc8_j1850(idle[1:8], init=0x00, xorout=0x03)
+
 
 class TestArc:
   def test_next_arc_skips_0xf(self):

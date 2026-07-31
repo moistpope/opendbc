@@ -90,20 +90,29 @@ def create_accel_command(packer, accel_payload, counter_a, counter_b):
   return _finalize(packer.make_can_msg("ADAS_ACCEL_CONTROL", 0, values))
 
 
-def create_authority_command(packer, counter_a):
+# LKAS_STEER_AUTHORITY (0x1C0) payload, confirmed from capture. Byte 1's low nibble is the ARC and
+# byte 0 is the CRC; the rest of the payload is constant except three lateral-control validity bits
+# that flip to "valid" while LKAS is active:
+#   idle:   b2=0x48 b3=0x10 b4..b7=0x00
+#   active: b2=0x49 b3=0x51   (b2 |= 0x01 StsVld, b3 |= 0x01 DrvrOvrdVld, b3 |= 0x40 ReqVld)
+_AUTH_B2_CONST = 0x48
+_AUTH_B3_CONST = 0x10
+_AUTH_B2_STSVLD = 0x01
+_AUTH_B3_DRVROVRDVLD = 0x01
+_AUTH_B3_REQVLD = 0x40
+
+
+def create_authority_command(counter_a, lat_active=True):
   """LKAS_STEER_AUTHORITY (0x1C0) — the lateral-control validity frame the EPS requires alongside
   ADAS_STEER_CONTROL. Non-SecOC: byte 0 is a CRC over the full payload (bytes 1-7, xor-out 0x03) and
-  byte 1's low nibble is a standalone ARC. All three validity fields must read valid (=1) or the EPS
-  raises DTC U12F786 (implausible) and ignores our steering command; if the frame stops entirely the
-  EPS raises U12F787 (lost communication). The CRC/ARC scheme is confirmed (knowledge base section
-  6); the exact bit positions of the validity fields are reverse-engineered from the DTC signal
-  names and not yet capture-verified.
+  byte 1's low nibble is a standalone ARC. While lat_active the three validity fields read valid; if
+  the frame is absent the EPS raises U12F787 (lost communication) and if the fields are not valid it
+  raises U12F786 (implausible) — either way it ignores our steering command. Byte layout confirmed
+  from capture (see the constants above).
   """
-  values = {
-    "COUNTER_A": counter_a,
-    "UNKNOWN_CONSTANT_1": 0,
-    "ADAS_LatCtrl_StsVld": 1,
-    "ADAS_LatCtrl_DrvrOvrdVld": 1,
-    "ADAS_LatCtrl_ReqVld": 1,
-  }
-  return _finalize(packer.make_can_msg("LKAS_STEER_AUTHORITY", 0, values))
+  dat = bytearray(8)
+  dat[1] = counter_a & 0x0F
+  dat[2] = _AUTH_B2_CONST | (_AUTH_B2_STSVLD if lat_active else 0)
+  dat[3] = _AUTH_B3_CONST | ((_AUTH_B3_DRVROVRDVLD | _AUTH_B3_REQVLD) if lat_active else 0)
+  dat[0] = _checksum(LKAS_STEER_AUTHORITY_ADDR, bytes(dat))
+  return LKAS_STEER_AUTHORITY_ADDR, bytes(dat), 0

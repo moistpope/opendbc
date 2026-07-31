@@ -1,5 +1,5 @@
 from opendbc.car import get_safety_config, structs
-from opendbc.car.fisker.values import FiskerFlags
+from opendbc.car.fisker.values import FiskerFlags, FiskerSafetyFlags
 from opendbc.car.fisker.carstate import CarState
 from opendbc.car.fisker.carcontroller import CarController
 from opendbc.car.fisker.radar_interface import RadarInterface
@@ -16,11 +16,6 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
     ret.brand = "fisker"
-
-    # Development placeholder: there is no SAFETY_FISKER panda mode yet, so use ALLOUTPUT
-    # to allow bring-up testing of long/lat control paths with provisional tuning values.
-    # TODO: implement modes/fisker.h (SecOC-aware) and switch to SafetyModel.fisker.
-    ret.safetyConfigs = [get_safety_config(SafetyModel.allOutput)]
     ret.dashcamOnly = False
 
     # Lateral is torque-based. Use the shared torque-tune path so commanded curvature
@@ -40,6 +35,15 @@ class CarInterface(CarInterfaceBase):
     # and limit bring-up to lateral/SecOC steering takeover.
     ret.openpilotLongitudinalControl = False
     ret.pcmCruise = True
+
+    # SAFETY_FISKER (opendbc/safety/modes/fisker.h): torque-limited lateral takeover with the
+    # authority frame allowlisted. Longitudinal actuation is gated behind the LONGITUDINAL flag and
+    # left off here (stock ACC longitudinal stays active). Steer/accel limits are still provisional
+    # (see values.py / the mode).
+    safety_param = 0
+    if ret.openpilotLongitudinalControl:
+      safety_param |= FiskerSafetyFlags.LONGITUDINAL
+    ret.safetyConfigs = [get_safety_config(SafetyModel.fisker, safety_param)]
     ret.minEnableSpeed = -1.0
     ret.stopAccel = -2.0
     ret.longitudinalTuning.kpBP = [0.0, 5.0, 15.0, 30.0]
