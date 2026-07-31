@@ -12,10 +12,18 @@ LongCtrlState = structs.CarControl.Actuators.LongControlState
 
 # NOTE: this is an early bring-up controller. It runs under SAFETY_FISKER, which torque-limits the
 # lateral takeover in firmware; control is additionally gated in software until a recovered SecOC key
-# and a verified GW_SECOC_SYNC are available. When latActive it emits both the steer command
-# (ADAS_STEER_CONTROL 0x1D0) and the authority frame (LKAS_STEER_AUTHORITY 0x1C0) the EPS requires,
-# with ARC and SecOC message counters seeded from the stock Hydra module (see secoc_mirror.py) so
-# the takeover is accepted without a counter discontinuity. Steering/accel scaling are provisional.
+# and a verified GW_SECOC_SYNC are available. While engaged it emits LKAS_STEER_AUTHORITY (0x1C0)
+# every cycle (idle payload when not steering, active when latActive) so the EPS never sees it drop,
+# and the steer command (ADAS_STEER_CONTROL 0x1D0) while latActive.
+#
+# Two distinct counters ride on these frames and are handled separately (see secoc_mirror.py):
+#   * the SecOC message/freshness counter (0x1D0/0x121) restarts at 1 on each GW_SECOC_SYNC reset
+#     epoch and feeds the CMAC;
+#   * the byte-1 Alive-Rolling-Counter (COUNTER_A, and the 0x1C0 ARC) is a CONTINUOUS 15-state
+#     counter (skip 0x0F) that advances once per transmitted frame and must NEVER reset on an epoch
+#     -- doing so makes the EPS raise an ARC fault and reject steering.
+# Both are seeded from the stock Hydra so the takeover has no counter discontinuity. Steering/accel
+# scaling are provisional.
 
 
 class CarController(CarControllerBase):
@@ -23,11 +31,17 @@ class CarController(CarControllerBase):
     super().__init__(dbc_names, CP)
     self.params = CarControllerParams(self.CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
-    # SecOC message counters restart at 1 each reset epoch; seeded from the Hydra at takeover.
+    # SecOC message counters (freshness): restart at 1 each reset epoch; seeded from the Hydra.
     self.steer_msg_counter = 1
     self.accel_msg_counter = 1
-    # Standalone Alive-Rolling-Counter for the non-SecOC LKAS_STEER_AUTHORITY (0x1C0) frame.
+    # Alive-Rolling-Counters (byte-1 COUNTER_A / the 0x1C0 ARC). These are CONTINUOUS 15-state
+    # counters (skip 0x0F), advanced once per transmitted frame of their message, and must NOT reset
+    # on a SecOC reset epoch -- only the freshness counters above do. They are independent of the
+    # SecOC message counter (an earlier revision wrongly tied COUNTER_A to it).
+    self.steer_arc = 0
+    self.accel_arc = 0
     self.authority_arc = 0
+    self.prev_enabled = False
     self.prev_lat_active = False
     self.prev_long_active = False
     self.secoc_prev_reset_cnt = None
@@ -59,12 +73,13 @@ class CarController(CarControllerBase):
 
     # *** handle SecOC reset counter increase ***
     if reset_cnt != self.secoc_prev_reset_cnt:
-      # New epoch: SecOC message counters restart at 1 (confirmed ground truth) and the authority
-      # ARC restarts. The GW -- not the ADAS module -- broadcasts GW_SECOC_SYNC, so these resets
-      # keep arriving even after we have isolated the stock module and taken over.
+      # New epoch: ONLY the SecOC message (freshness) counters restart at 1 (confirmed ground truth).
+      # The Alive-Rolling-Counters (COUNTER_A / the 0x1C0 ARC) are continuous and must NOT reset here
+      # -- resetting them mid-count makes the EPS raise an ARC fault (U12F782/U12F882) and reject
+      # steering. The GW -- not the ADAS module -- broadcasts GW_SECOC_SYNC, so these resets keep
+      # arriving even after we have isolated the stock module and taken over.
       self.steer_msg_counter = 1
       self.accel_msg_counter = 1
-      self.authority_arc = 0
       self.secoc_prev_reset_cnt = reset_cnt
 
       expected_mac = int.from_bytes(fisker_secoc.sync_mac(self.secoc_key, trip_cnt, reset_cnt), "big")
@@ -82,27 +97,34 @@ class CarController(CarControllerBase):
       self.frame += 1
       return new_actuators, can_sends
 
-    # *** lateral (ADAS_STEER_CONTROL 0x1D0 + LKAS_STEER_AUTHORITY 0x1C0) ***
+    # *** LKAS_STEER_AUTHORITY (0x1C0) -- emitted every cycle while engaged ***
+    # The EPS expects this frame continuously; its absence raises U12F787 (lost comm) and drops the
+    # steering authorization -- so it must NOT be gated on latActive (which toggles within a drive).
+    # The validity fields go "active" while latActive and "idle" otherwise (matching the stock
+    # module). Non-SecOC, with its own continuous ARC that never resets on epoch. Seeded from the
+    # Hydra at the engage edge so it continues the stock sequence at takeover.
+    if CC.enabled:
+      if not self.prev_enabled:
+        seed = CS.secoc_mirror.seed_arc(fiskercan.LKAS_STEER_AUTHORITY_ADDR)
+        if seed is not None:
+          self.authority_arc = seed
+      auth_addr, auth_dat, auth_bus = fiskercan.create_authority_command(self.authority_arc, lat_active=bool(CC.latActive))
+      can_sends.append((auth_addr, auth_dat, auth_bus))
+      self.authority_arc = secoc_mirror.next_arc(self.authority_arc)
+
+    # *** lateral steer command (ADAS_STEER_CONTROL 0x1D0) ***
     if CC.latActive:
       if not self.prev_lat_active:
-        # Continue the Hydra's counters so the EPS accepts the takeover without an ARC/freshness
-        # discontinuity. seed_secoc returns the full reconstructed running counter + 1 (not the
-        # truncated 6-bit wire value); seed_arc returns the next authority ARC.
+        # Continue the Hydra's SecOC freshness counter (full reconstructed value + 1, not the 6-bit
+        # wire value) and its byte-1 ARC so the EPS accepts the takeover without a discontinuity.
         secoc_seed = CS.secoc_mirror.seed_secoc(fiskercan.ADAS_STEER_CONTROL_ADDR, reset_cnt)
         if secoc_seed is not None:
           self.steer_msg_counter = secoc_seed
-        arc_seed = CS.secoc_mirror.seed_arc(fiskercan.LKAS_STEER_AUTHORITY_ADDR)
+        arc_seed = CS.secoc_mirror.seed_arc(fiskercan.ADAS_STEER_CONTROL_ADDR)
         if arc_seed is not None:
-          self.authority_arc = arc_seed
+          self.steer_arc = arc_seed
         carlog.warning(f"fisker.controller seed steer_msg_counter={self.steer_msg_counter} (secoc_seed={secoc_seed}) "
-                       f"authority_arc={self.authority_arc} (arc_seed={arc_seed}) reset={reset_cnt}")
-
-      # LKAS_STEER_AUTHORITY (0x1C0) must be present and valid alongside the steer command or the
-      # EPS rejects steering (U12F786/U12F787). Non-SecOC, its own ARC.
-      auth_addr, auth_dat, auth_bus = fiskercan.create_authority_command(self.authority_arc, lat_active=True)
-      can_sends.append((auth_addr, auth_dat, auth_bus))
-      carlog.warning(f"fisker.controller emit authority addr=0x{auth_addr:03X} bus={auth_bus} arc={self.authority_arc} dat={auth_dat.hex()}")
-      self.authority_arc = secoc_mirror.next_arc(self.authority_arc)
+                       f"steer_arc={self.steer_arc} (arc_seed={arc_seed}) reset={reset_cnt}")
 
       cs_out = getattr(CS, "out", None)
       steering_angle_deg = getattr(cs_out, "steeringAngleDeg", getattr(CS, "steeringAngleDeg", float("nan")))
@@ -117,12 +139,13 @@ class CarController(CarControllerBase):
       if apply_torque != apply_torque_unclamped:
         carlog.warning(f"fisker.controller steer_saturated unclamped={apply_torque_unclamped} clamped={apply_torque} "
                        f"min={self.params.STEER_MIN} max={self.params.STEER_MAX}")
-      counter_a = self.steer_msg_counter & 0x0F
-      addr, dat, bus = fiskercan.create_steer_command(self.packer, apply_torque, True, counter_a)
+      addr, dat, bus = fiskercan.create_steer_command(self.packer, apply_torque, True, self.steer_arc)
       dat = fisker_secoc.stamp_secoc(self.secoc_key, addr, dat, trip_cnt, reset_cnt, self.steer_msg_counter)
       can_sends.append((addr, dat, bus))
       raw12 = apply_torque & 0x0FFF
-      carlog.warning(f"fisker.controller emit steer addr=0x{addr:03X} bus={bus} apply_torque={apply_torque} raw12={raw12} msg_counter={self.steer_msg_counter} dat={dat.hex()}")
+      carlog.warning(f"fisker.controller emit steer addr=0x{addr:03X} bus={bus} apply_torque={apply_torque} raw12={raw12} "
+                     f"arc={self.steer_arc} msg_counter={self.steer_msg_counter} dat={dat.hex()}")
+      self.steer_arc = secoc_mirror.next_arc(self.steer_arc)
       self.steer_msg_counter += 1
     else:
       carlog.warning("fisker.controller suppress steer reason=latInactive")
@@ -133,16 +156,19 @@ class CarController(CarControllerBase):
         secoc_seed = CS.secoc_mirror.seed_secoc(fiskercan.ADAS_ACCEL_CONTROL_ADDR, reset_cnt)
         if secoc_seed is not None:
           self.accel_msg_counter = secoc_seed
-        carlog.warning(f"fisker.controller seed accel_msg_counter={self.accel_msg_counter} (secoc_seed={secoc_seed}) reset={reset_cnt}")
+        arc_seed = CS.secoc_mirror.seed_arc(fiskercan.ADAS_ACCEL_CONTROL_ADDR)
+        if arc_seed is not None:
+          self.accel_arc = arc_seed
+        carlog.warning(f"fisker.controller seed accel_msg_counter={self.accel_msg_counter} accel_arc={self.accel_arc} reset={reset_cnt}")
       accel = clip(actuators.accel, self.params.ACCEL_MIN, self.params.ACCEL_MAX)
       accel_payload = int(round(self.params.ACCEL_PAYLOAD_NEUTRAL + accel * self.params.ACCEL_PAYLOAD_PER_MPS2))
       accel_payload = int(clip(accel_payload, self.params.ACCEL_PAYLOAD_MIN, self.params.ACCEL_PAYLOAD_MAX))
-      counter_a = self.accel_msg_counter & 0x0F
-      counter_b = self.accel_msg_counter & 0x0F
-      addr, dat, bus = fiskercan.create_accel_command(self.packer, accel_payload, counter_a, counter_b)
+      addr, dat, bus = fiskercan.create_accel_command(self.packer, accel_payload, self.accel_arc, self.accel_arc)
       dat = fisker_secoc.stamp_secoc(self.secoc_key, addr, dat, trip_cnt, reset_cnt, self.accel_msg_counter)
       can_sends.append((addr, dat, bus))
-      carlog.warning(f"fisker.controller emit accel addr=0x{addr:03X} bus={bus} accel={float(accel):.3f} payload={accel_payload} msg_counter={self.accel_msg_counter} dat={dat.hex()}")
+      carlog.warning(f"fisker.controller emit accel addr=0x{addr:03X} bus={bus} accel={float(accel):.3f} payload={accel_payload} "
+                     f"arc={self.accel_arc} msg_counter={self.accel_msg_counter} dat={dat.hex()}")
+      self.accel_arc = secoc_mirror.next_arc(self.accel_arc)
       self.accel_msg_counter += 1
     else:
       carlog.warning("fisker.controller suppress accel reason=longInactive")
@@ -151,6 +177,7 @@ class CarController(CarControllerBase):
     if CC.latActive:
       new_actuators.torque = actuators.torque
 
+    self.prev_enabled = bool(CC.enabled)
     self.prev_lat_active = bool(CC.latActive)
     self.prev_long_active = bool(CC.longActive)
     self.frame += 1
