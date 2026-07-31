@@ -60,6 +60,13 @@ If modules disagree, no key is stored.
 - Longitudinal and lateral command generation is active in the control stack.
 - SecOC signing pipeline remains in place for steer/accel messages.
 - Automatic SecOC key retrieval attempts happen at startup on Fisker.
+- Lateral takeover emits the full pair the EPS requires: `ADAS_STEER_CONTROL` (0x1D0, SecOC) **and**
+  `LKAS_STEER_AUTHORITY` (0x1C0, non-SecOC, CRC over bytes 1-7 xor-out 0x03, all validity fields
+  set). Missing 0x1C0 makes the EPS raise `U12F786`/`U12F787` and ignore steering.
+- ARC and SecOC message counters are seeded from the stock Hydra module and continued without a
+  discontinuity at takeover (`secoc_mirror.py`): the full SecOC running counter is reconstructed the
+  way the receiver does (past the 6-bit wire wrap), not read raw, so our MAC matches the EPS's
+  expected freshness. Counters restart at 1 on each `GW_SECOC_SYNC` reset epoch.
 
 ## Placeholder / not production-safe yet
 
@@ -68,6 +75,9 @@ If modules disagree, no key is stored.
 - accel payload conversion is placeholder-only.
 - steering and longitudinal limits remain placeholder values.
 - radar object tracking remains undecoded.
+- the exact bit positions of the `0x1C0` validity fields (`ADAS_LatCtrl_StsVld`/`DrvrOvrdVld`/
+  `ReqVld`) are reverse-engineered from the DTC signal names, not yet confirmed against a capture;
+  the CRC/ARC scheme carrying them is confirmed.
 
 ## Next Calibration Priorities
 

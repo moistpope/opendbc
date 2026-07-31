@@ -5,15 +5,18 @@ from opendbc.car import fisker_secoc
 from numpy import clip
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.fisker import fiskercan
+from opendbc.car.fisker import secoc_mirror
 from opendbc.car.fisker.values import CarControllerParams
 
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-# NOTE: this is an early bring-up controller. The car currently runs under SafetyModel.noOutput
-# (read-only), so any control messages built here are blocked by panda and never reach the car.
-# The message-building path is kept real so the CRC8-J1850 + SecOC plumbing is exercised and tested
-# (see opendbc/car/fisker/tests/test_secoc_crc.py). Steering/accel scaling are still provisional.
-# TODO: implement a real SAFETY_FISKER panda mode before enabling TX.
+# NOTE: this is an early bring-up controller. It runs under SafetyModel.allOutput (development only:
+# no firmware-enforced torque/accel limits), so control is gated in software until a recovered SecOC
+# key and a verified GW_SECOC_SYNC are available. When latActive it emits both the steer command
+# (ADAS_STEER_CONTROL 0x1D0) and the authority frame (LKAS_STEER_AUTHORITY 0x1C0) the EPS requires,
+# with ARC and SecOC message counters seeded from the stock Hydra module (see secoc_mirror.py) so
+# the takeover is accepted without a counter discontinuity. Steering/accel scaling are provisional.
+# TODO: implement a real SAFETY_FISKER panda mode before enabling TX on public roads.
 
 
 class CarController(CarControllerBase):
@@ -21,8 +24,11 @@ class CarController(CarControllerBase):
     super().__init__(dbc_names, CP)
     self.params = CarControllerParams(self.CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
-    self.steer_msg_counter = 0
-    self.accel_msg_counter = 0
+    # SecOC message counters restart at 1 each reset epoch; seeded from the Hydra at takeover.
+    self.steer_msg_counter = 1
+    self.accel_msg_counter = 1
+    # Standalone Alive-Rolling-Counter for the non-SecOC LKAS_STEER_AUTHORITY (0x1C0) frame.
+    self.authority_arc = 0
     self.prev_lat_active = False
     self.prev_long_active = False
     self.secoc_prev_reset_cnt = None
@@ -31,29 +37,14 @@ class CarController(CarControllerBase):
   def _has_valid_secoc_key(self) -> bool:
     return len(self.secoc_key) == 16
 
-  @staticmethod
-  def _next_counter_from_stock_state(stock_state, reset_cnt: int) -> int | None:
-    if stock_state is None or stock_state.get("reset_counter") != reset_cnt:
-      return None
-
-    message_counter_lower = stock_state.get("message_counter_lower")
-    counter_a = stock_state.get("counter_a")
-    if message_counter_lower is None or counter_a is None:
-      return None
-
-    if (message_counter_lower & 0x0F) == counter_a:
-      return (message_counter_lower + 1) & 0x3F
-
-    return (counter_a + 1) & 0x0F
-
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     can_sends = []
-    stock_control_state = getattr(CS, "stock_adas_control_state", {})
 
     carlog.warning(f"fisker.controller frame={self.frame} enabled={CC.enabled} latActive={CC.latActive} longActive={CC.longActive} "
                    f"secoc_key_valid={self._has_valid_secoc_key()} sync_valid={self.secoc_sync_valid} "
-                   f"stock_1d0={stock_control_state.get(0x1D0)} stock_121={stock_control_state.get(0x121)}")
+                   f"mirror_1d0={CS.secoc_mirror.running.get(0x1D0)} mirror_121={CS.secoc_mirror.running.get(0x121)} "
+                   f"mirror_arc_1c0={CS.secoc_mirror.arc.get(0x1C0)}")
 
     # Never send SecOC-protected frames without a valid recovered key.
     if not self._has_valid_secoc_key():
@@ -69,8 +60,12 @@ class CarController(CarControllerBase):
 
     # *** handle SecOC reset counter increase ***
     if reset_cnt != self.secoc_prev_reset_cnt:
-      self.steer_msg_counter = 0
-      self.accel_msg_counter = 0
+      # New epoch: SecOC message counters restart at 1 (confirmed ground truth) and the authority
+      # ARC restarts. The GW -- not the ADAS module -- broadcasts GW_SECOC_SYNC, so these resets
+      # keep arriving even after we have isolated the stock module and taken over.
+      self.steer_msg_counter = 1
+      self.accel_msg_counter = 1
+      self.authority_arc = 0
       self.secoc_prev_reset_cnt = reset_cnt
 
       expected_mac = int.from_bytes(fisker_secoc.sync_mac(self.secoc_key, trip_cnt, reset_cnt), "big")
@@ -88,15 +83,28 @@ class CarController(CarControllerBase):
       self.frame += 1
       return new_actuators, can_sends
 
-    # *** lateral (ADAS_STEER_CONTROL) ***
+    # *** lateral (ADAS_STEER_CONTROL 0x1D0 + LKAS_STEER_AUTHORITY 0x1C0) ***
     if CC.latActive:
       if not self.prev_lat_active:
-        next_counter = self._next_counter_from_stock_state(stock_control_state.get(0x1D0), reset_cnt)
-        if next_counter is not None:
-          self.steer_msg_counter = next_counter
-          carlog.warning(f"fisker.controller seed steer_msg_counter={self.steer_msg_counter} from stock={stock_control_state.get(0x1D0)}")
-        else:
-          carlog.warning(f"fisker.controller seed steer_msg_counter unavailable stock={stock_control_state.get(0x1D0)} reset={reset_cnt}")
+        # Continue the Hydra's counters so the EPS accepts the takeover without an ARC/freshness
+        # discontinuity. seed_secoc returns the full reconstructed running counter + 1 (not the
+        # truncated 6-bit wire value); seed_arc returns the next authority ARC.
+        secoc_seed = CS.secoc_mirror.seed_secoc(fiskercan.ADAS_STEER_CONTROL_ADDR, reset_cnt)
+        if secoc_seed is not None:
+          self.steer_msg_counter = secoc_seed
+        arc_seed = CS.secoc_mirror.seed_arc(fiskercan.LKAS_STEER_AUTHORITY_ADDR)
+        if arc_seed is not None:
+          self.authority_arc = arc_seed
+        carlog.warning(f"fisker.controller seed steer_msg_counter={self.steer_msg_counter} (secoc_seed={secoc_seed}) "
+                       f"authority_arc={self.authority_arc} (arc_seed={arc_seed}) reset={reset_cnt}")
+
+      # LKAS_STEER_AUTHORITY (0x1C0) must be present and valid alongside the steer command or the
+      # EPS rejects steering (U12F786/U12F787). Non-SecOC, its own ARC.
+      auth_addr, auth_dat, auth_bus = fiskercan.create_authority_command(self.packer, self.authority_arc)
+      can_sends.append((auth_addr, auth_dat, auth_bus))
+      carlog.warning(f"fisker.controller emit authority addr=0x{auth_addr:03X} bus={auth_bus} arc={self.authority_arc} dat={auth_dat.hex()}")
+      self.authority_arc = secoc_mirror.next_arc(self.authority_arc)
+
       cs_out = getattr(CS, "out", None)
       steering_angle_deg = getattr(cs_out, "steeringAngleDeg", getattr(CS, "steeringAngleDeg", float("nan")))
       v_ego = getattr(cs_out, "vEgo", getattr(CS, "vEgo", float("nan")))
@@ -123,12 +131,10 @@ class CarController(CarControllerBase):
     # *** longitudinal (ADAS_ACCEL_CONTROL) ***
     if CC.longActive:
       if not self.prev_long_active:
-        next_counter = self._next_counter_from_stock_state(stock_control_state.get(0x121), reset_cnt)
-        if next_counter is not None:
-          self.accel_msg_counter = next_counter
-          carlog.warning(f"fisker.controller seed accel_msg_counter={self.accel_msg_counter} from stock={stock_control_state.get(0x121)}")
-        else:
-          carlog.warning(f"fisker.controller seed accel_msg_counter unavailable stock={stock_control_state.get(0x121)} reset={reset_cnt}")
+        secoc_seed = CS.secoc_mirror.seed_secoc(fiskercan.ADAS_ACCEL_CONTROL_ADDR, reset_cnt)
+        if secoc_seed is not None:
+          self.accel_msg_counter = secoc_seed
+        carlog.warning(f"fisker.controller seed accel_msg_counter={self.accel_msg_counter} (secoc_seed={secoc_seed}) reset={reset_cnt}")
       accel = clip(actuators.accel, self.params.ACCEL_MIN, self.params.ACCEL_MAX)
       accel_payload = int(round(self.params.ACCEL_PAYLOAD_NEUTRAL + accel * self.params.ACCEL_PAYLOAD_PER_MPS2))
       accel_payload = int(clip(accel_payload, self.params.ACCEL_PAYLOAD_MIN, self.params.ACCEL_PAYLOAD_MAX))

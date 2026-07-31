@@ -5,6 +5,8 @@ from opendbc.car import create_button_events
 from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
+from opendbc.car.fisker import fiskercan
+from opendbc.car.fisker.secoc_mirror import SecOCCounterMirror
 from opendbc.car.fisker.values import DBC, STEER_THRESHOLD, STEER_DISENGAGE_THRESHOLD, CRUISE_STATUS_INACTIVE, CRUISE_STATUS_SET, CRUISE_STATUS_ACTIVE, STEERING_BTN_PRESSED
 
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -23,6 +25,17 @@ class CarState(CarStateBase):
     # raw SecOC synchronization / freshness message, forwarded to the controller
     self.secoc_synchronization = None
 
+    # Continuously mirror the stock ADAS/Hydra module's per-message freshness counters so the
+    # controller can seed its own counters and take over communication without a discontinuity the
+    # EPS would reject. Only genuine bus-0 RX (the stock module) reaches these parsers -- our own TX
+    # echoes back on bus 128 -- so the mirror tracks the Hydra, not ourselves.
+    self.secoc_mirror = SecOCCounterMirror([
+      fiskercan.ADAS_STEER_CONTROL_ADDR,
+      fiskercan.ADAS_ACCEL_CONTROL_ADDR,
+      fiskercan.LKAS_STEER_AUTHORITY_ADDR,
+    ])
+    self._stock_control_ts: dict[int, int] = {}
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     ret = structs.CarState()
@@ -31,6 +44,14 @@ class CarState(CarStateBase):
     # opendbc/car/fisker_secoc.py); forward the whole message so the controller can track resets
     # and verify the sync MAC.
     self.secoc_synchronization = copy.copy(cp.vl["GW_SECOC_SYNC"])
+
+    # Feed the SecOC counter mirror from the stock ADAS control frames (only when a genuinely new
+    # frame has arrived -- guarded by the parser timestamp -- so the running-counter reconstruction
+    # advances exactly once per stock frame). These are only present while the stock module is on
+    # bus 0 (mid-takeover); once it is isolated the mirror simply holds the last-seen seed values.
+    self._observe_stock_secoc(cp, "ADAS_STEER_CONTROL", fiskercan.ADAS_STEER_CONTROL_ADDR)
+    self._observe_stock_secoc(cp, "ADAS_ACCEL_CONTROL", fiskercan.ADAS_ACCEL_CONTROL_ADDR)
+    self._observe_stock_authority(cp, "LKAS_STEER_AUTHORITY", fiskercan.LKAS_STEER_AUTHORITY_ADDR)
 
     # speed. ESP_WHEEL_SPEED reports two wheels scaled to km/h (0.075 factor applied by the parser).
     # TODO: confirm which wheels these are and whether a 4-wheel source exists (WHEEL_SPEED, 0x125)
@@ -83,6 +104,24 @@ class CarState(CarStateBase):
 
     return ret
 
+  def _observe_stock_secoc(self, cp, msg_name, addr):
+    """Mirror one SecOC control frame (0x1D0/0x121) if a new one has arrived."""
+    ts = cp.ts_nanos[msg_name]["COUNTER_A"]
+    if ts == 0 or ts == self._stock_control_ts.get(addr):
+      return
+    self._stock_control_ts[addr] = ts
+    vals = cp.vl[msg_name]
+    self.secoc_mirror.observe(addr, int(vals["RESET_COUNTER"]),
+                              int(vals["MESSAGE_COUNTER_LOWER"]), int(vals["COUNTER_A"]))
+
+  def _observe_stock_authority(self, cp, msg_name, addr):
+    """Mirror the ARC of one non-SecOC authority frame (0x1C0) if a new one has arrived."""
+    ts = cp.ts_nanos[msg_name]["COUNTER_A"]
+    if ts == 0 or ts == self._stock_control_ts.get(addr):
+      return
+    self._stock_control_ts[addr] = ts
+    self.secoc_mirror.observe_arc(addr, int(cp.vl[msg_name]["COUNTER_A"]))
+
   @staticmethod
   def get_can_parsers(CP):
     pt_messages = [
@@ -98,6 +137,12 @@ class CarState(CarStateBase):
       ("MAYBE_READY", float('nan')),
       ("CRUISE_CONTROL_STATUS", float('nan')),
       ("STEERING_WHEEL", float('nan')),
+      # Stock ADAS control frames -- parsed (when the stock module is present on bus 0) only to
+      # seed the SecOC/ARC counter mirror for a seamless takeover. nan frequency so their absence
+      # after the module is isolated does not invalidate the bus.
+      ("ADAS_STEER_CONTROL", float('nan')),
+      ("ADAS_ACCEL_CONTROL", float('nan')),
+      ("LKAS_STEER_AUTHORITY", float('nan')),
     ]
 
     return {

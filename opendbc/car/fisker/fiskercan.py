@@ -17,12 +17,22 @@
 
 ADAS_STEER_CONTROL_ADDR = 0x1D0
 ADAS_ACCEL_CONTROL_ADDR = 0x121
+LKAS_STEER_AUTHORITY_ADDR = 0x1C0
 
 _CRC8_J1850_POLY = 0x1D
 # per-message XOR-out constant applied on top of the CRC-8/SAE-J1850 shift register
 _CRC_XOROUT = {
   ADAS_STEER_CONTROL_ADDR: 0x25,
   ADAS_ACCEL_CONTROL_ADDR: 0xD1,
+  LKAS_STEER_AUTHORITY_ADDR: 0x03,
+}
+# CRC coverage (start, end) as a byte slice: the two SecOC control frames checksum only bytes 1-3
+# (the command portion, ahead of the SecOC freshness/MAC tail), while non-SecOC COUNTER_CRC frames
+# like LKAS_STEER_AUTHORITY checksum the full payload, bytes 1-7. (knowledge base section 6)
+_CRC_COVERAGE = {
+  ADAS_STEER_CONTROL_ADDR: (1, 4),
+  ADAS_ACCEL_CONTROL_ADDR: (1, 4),
+  LKAS_STEER_AUTHORITY_ADDR: (1, 8),
 }
 
 
@@ -41,9 +51,10 @@ def crc8_j1850(data: bytes, init: int = 0xFF, xorout: int = 0xFF) -> int:
 
 
 def _checksum(addr: int, dat: bytes) -> int:
-  """The real ADAS_STEER_CONTROL/ADAS_ACCEL_CONTROL frame checksum (byte 0): CRC-8/SAE-J1850
-  (init 0x00) over bytes 1-3, XORed with a per-message constant."""
-  return crc8_j1850(bytes(dat[1:4]), init=0x00, xorout=_CRC_XOROUT[addr])
+  """The real frame checksum (byte 0): CRC-8/SAE-J1850 (init 0x00) over this message's covered
+  bytes, XORed with a per-message constant."""
+  lo, hi = _CRC_COVERAGE[addr]
+  return crc8_j1850(bytes(dat[lo:hi]), init=0x00, xorout=_CRC_XOROUT[addr])
 
 
 def _finalize(msg):
@@ -77,3 +88,22 @@ def create_accel_command(packer, accel_payload, counter_a, counter_b):
     "UNKNOWN_CONSTANT": 8,
   }
   return _finalize(packer.make_can_msg("ADAS_ACCEL_CONTROL", 0, values))
+
+
+def create_authority_command(packer, counter_a):
+  """LKAS_STEER_AUTHORITY (0x1C0) — the lateral-control validity frame the EPS requires alongside
+  ADAS_STEER_CONTROL. Non-SecOC: byte 0 is a CRC over the full payload (bytes 1-7, xor-out 0x03) and
+  byte 1's low nibble is a standalone ARC. All three validity fields must read valid (=1) or the EPS
+  raises DTC U12F786 (implausible) and ignores our steering command; if the frame stops entirely the
+  EPS raises U12F787 (lost communication). The CRC/ARC scheme is confirmed (knowledge base section
+  6); the exact bit positions of the validity fields are reverse-engineered from the DTC signal
+  names and not yet capture-verified.
+  """
+  values = {
+    "COUNTER_A": counter_a,
+    "UNKNOWN_CONSTANT_1": 0,
+    "ADAS_LatCtrl_StsVld": 1,
+    "ADAS_LatCtrl_DrvrOvrdVld": 1,
+    "ADAS_LatCtrl_ReqVld": 1,
+  }
+  return _finalize(packer.make_can_msg("LKAS_STEER_AUTHORITY", 0, values))
