@@ -84,5 +84,56 @@ class TestFiskerIccSettings(unittest.TestCase):
     self.assertFalse(self.safety.get_relay_malfunction())
 
 
+class TestFiskerCruiseState(unittest.TestCase):
+  """Cruise engagement follows the ADAS module's ACC state (ADAS_0x313, bus 2)."""
+
+  # ADAS_Sts_ACC_ICC: Active, Override, Standstill_active, Standstill_wait, Standstill_GoNotification
+  ENGAGED_STATES = {3, 4, 5, 6, 11}
+
+  def setUp(self):
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.fisker, 0)
+    self.safety.init_tests()
+
+  def _state_msg(self, addr, bus, acc_state):
+    dat = bytearray(8)
+    dat[4] = acc_state & 0x0F  # 4-bit @ Motorola start 35 -> data[4] low nibble
+    return common.make_msg(bus, addr, dat=bytes(dat))
+
+  def _rx_acc_state(self, acc_state, addr=0x313, bus=2):
+    self.safety.safety_rx_hook(self._state_msg(addr, bus, acc_state))
+
+  def test_engaged_states(self):
+    for acc_state in range(16):
+      with self.subTest(acc_state=acc_state):
+        self._rx_acc_state(0)
+        self.assertFalse(self.safety.get_controls_allowed())
+        self._rx_acc_state(acc_state)
+        self.assertEqual(self.safety.get_controls_allowed(), acc_state in self.ENGAGED_STATES)
+
+  def test_disengage_on_acc_exit(self):
+    for acc_state in set(range(16)) - self.ENGAGED_STATES:
+      with self.subTest(acc_state=acc_state):
+        self._rx_acc_state(0)
+        self._rx_acc_state(3)
+        self.assertTrue(self.safety.get_controls_allowed())
+        self._rx_acc_state(acc_state)
+        self.assertFalse(self.safety.get_controls_allowed())
+
+  def test_stays_engaged_through_standstill(self):
+    self._rx_acc_state(0)
+    for acc_state in (3, 5, 6, 11, 3, 4):
+      self._rx_acc_state(acc_state)
+      self.assertTrue(self.safety.get_controls_allowed())
+
+  def test_other_sources_ignored(self):
+    # VCU basic cruise (0x358) no longer engages; 0x313 only counts from the ADAS side (bus 2)
+    for addr, bus in ((0x358, 0), (0x313, 0)):
+      with self.subTest(addr=hex(addr), bus=bus):
+        self._rx_acc_state(0)
+        self._rx_acc_state(3, addr=addr, bus=bus)
+        self.assertFalse(self.safety.get_controls_allowed())
+
+
 if __name__ == "__main__":
   unittest.main()

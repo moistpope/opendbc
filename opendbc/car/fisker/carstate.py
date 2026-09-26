@@ -161,23 +161,25 @@ class CarState(CarStateBase):
     ret.leftBlindspot = bsm_available and le_disp in (1, 2, 3)
     ret.rightBlindspot = bsm_available and ri_disp in (1, 2, 3)
 
-    # ---- Cruise state (VCU basic cruise control) ----
-    # openpilot intercepts the ADAS module, so its ACC frames (0x313/0x31C) are on the
-    # isolated side (bus 2) and not on the bus we read. The car uses the VCU's basic
-    # hold-speed cruise (VCU_Sts_CC_ICC, 0x358), which is gateway-sourced and native to
-    # bus 0. Enum: 0=Off 1=Init 2=Standby 3=Active 4=Override 9/10=Fault (no standstill).
-    # Set speed VCU_CcTrgSpdDisp is in the driver-selected unit (VCU_DispSpdUnit_CC VAL_:
-    # 0=KMH,1=MPH); 255=no_display. Populate speedCluster too so the UI "MAX" box renders.
-    vcu358 = cp_pt.vl["VCU_0x358"]
-    cc_state = int(vcu358["VCU_Sts_CC_ICC"])
-    cc_disp = vcu358["VCU_CcTrgSpdDisp"]
-    cc_speed = 0.0 if cc_disp >= 255 else cc_disp * (CV.MPH_TO_MS if vcu358["VCU_DispSpdUnit_CC"] == 1 else CV.KPH_TO_MS)
+    # ---- Cruise state (ADAS ACC) ----
+    # ACC is enabled via the 0x52A ICC-settings override, so the ADAS module's ACC state
+    # (ADAS_Sts_ACC_ICC, 0x313) is the cruise source — authored on the cam side (bus 2).
+    # Enum: 0=ACC_Off 1=Initialization 2=Standby 3=Active 4=Override 5=Standstill_active
+    # 6=Standstill_wait 7=Deactivation_brake 8=Deactivation_other 9=Failure_reversible
+    # 10=Failure_irreversible 11=Standstill_GoNotification. Must match fisker_rx_hook.
+    # Set speed ADAS_AccTrgSpdDisp (0x31C) is in the driver-selected unit
+    # (ADAS_DispSpdUnit_ACC VAL_: 0=KMH,1=MPH); 255=no_display. Populate speedCluster too
+    # so the UI "MAX" box renders.
+    acc_state = int(cp_cam.vl["ADAS_0x313"]["ADAS_Sts_ACC_ICC"])
+    acc_hud = cp_cam.vl["ADAS_0x31C"]
+    acc_disp = acc_hud["ADAS_AccTrgSpdDisp"]
+    acc_speed = 0.0 if acc_disp >= 255 else acc_disp * (CV.MPH_TO_MS if acc_hud["ADAS_DispSpdUnit_ACC"] == 1 else CV.KPH_TO_MS)
 
-    ret.cruiseState.enabled = cc_state in (3, 4)
-    ret.cruiseState.available = cc_state not in (0, 1, 9, 10)
-    ret.cruiseState.standstill = False
-    ret.cruiseState.speed = cc_speed
-    ret.cruiseState.speedCluster = cc_speed
+    ret.cruiseState.enabled = acc_state in (3, 4, 5, 6, 11)
+    ret.cruiseState.available = acc_state not in (0, 1, 9, 10)
+    ret.cruiseState.standstill = acc_state in (5, 6, 11)
+    ret.cruiseState.speed = acc_speed
+    ret.cruiseState.speedCluster = acc_speed
 
     # ---- Buttons (MFSS) ----
     mfs = cp_pt.vl["MFS_0x514"]
@@ -197,7 +199,7 @@ class CarState(CarStateBase):
 
     # ---- Faults ----
     ret.accFaulted = False
-    # ret.accFaulted = cc_state in (9, 10) or bool(cp_pt.vl["ESP_0x114"]["ESP_FltIndcn_AEB"])
+    # ret.accFaulted = acc_state in (9, 10) or bool(cp_pt.vl["ESP_0x114"]["ESP_FltIndcn_AEB"])
 
     # ---- OEM ADAS lateral counters (bus 2, for takeover alignment) --------
     # Snapshot the OEM ADAS's own AliveCounter and SSecOC_Fresh_Byte0 from bus 2. The
@@ -248,13 +250,11 @@ class CarState(CarStateBase):
       ("YRS_0x113", 100),
       ("EPS_0x1C2", 50),
       ("EPS_0x1C4", 50),
-      # ADAS module frames originate on bus 2 (cam-side of the splice). Cruise is
-      # replaced (openpilot supplies its own via VCU basic CC below); BSM is read from
-      # the cam-side parser below because pandad reports the packet's original src bus
-      # (2) even after panda forwards it to bus 0 for the cluster.
+      # ADAS module frames originate on bus 2 (cam-side of the splice). ACC state and
+      # BSM are read from the cam-side parser below because pandad reports the packet's
+      # original src bus (2) even after panda forwards it to bus 0 for the cluster.
       # Freqs are the real on-vehicle rates; over-declaring makes the CANParser flag a
       # message stale -> carState.canValid=False -> commIssue. Measured on ADASBUS.
-      ("VCU_0x358", 10),    # basic cruise-control (CC) state + set speed (~10 Hz)
       ("ICC_0x531", 10),
       ("GW_Syn_All", 2),    # SecOC sync (~3 Hz)
       # Gateway-mirrored body/HMI (also present on ADASBUS)
@@ -271,6 +271,8 @@ class CarState(CarStateBase):
     # onto bus 0 for the cluster, but pandad tags each packet with the src bus it was
     # originally received on — so a CANParser subscribed to bus 0 doesn't see them.
     cam_msgs = [
+      ("ADAS_0x313", 50),   # ADAS_Sts_ACC_ICC — ACC state (cruise engaged / available)
+      ("ADAS_0x31C", 20),   # ADAS_AccTrgSpdDisp — ACC set speed
       ("ADAS_0x314", 50),   # BSDSts + LKA/ELKA state enums
       ("ADAS_0x315", 20),   # BSD_CID_{Le,Ri}DispReq — blind-spot alert
       # OEM ADAS's lateral commands on bus 2 — we snapshot the AliveCounters and SecOC

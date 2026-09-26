@@ -251,6 +251,18 @@ BO_ 532 VCU_0x214: 16 GW
  SG_ VCU_214_SSecOC_MAC_Byte1 : 87|8@0+ (1,0) [0|255] ""  ADASBUS_Virtual_ECU
  SG_ VCU_214_SSecOC_MAC_Byte2 : 95|8@0+ (1,0) [0|255] ""  ADASBUS_Virtual_ECU
 
+BO_ 787 ADAS_0x313: 8 ADAS
+ SG_ ADAS_313_CheckSum : 7|8@0+ (1,0) [0|255] ""  FCM,GW
+ SG_ ADAS_313_AliveCounter : 11|4@0+ (1,0) [0|14] ""  FCM,GW
+ SG_ ADAS_FACM_Sts : 19|4@0+ (1,0) [0|15] ""  GW
+ SG_ ADAS_BACM_Sts : 23|4@0+ (1,0) [0|15] ""  GW
+ SG_ AEB_ReAEB_Sts : 27|4@0+ (1,0) [0|15] ""  GW
+ SG_ ADAS_Sts_ACC_ICC : 35|4@0+ (1,0) [0|15] ""  FCM,GW
+ SG_ ADAS_TJA_AutoSteerSts : 38|3@0+ (1,0) [0|7] ""  GW
+ SG_ ADAS_ISASts : 46|2@0+ (1,0) [0|3] ""  GW
+ SG_ ADAS_Sts_TLR : 50|2@0+ (1,0) [0|3] ""  GW
+ SG_ ADAS_TSRSts : 53|3@0+ (1,0) [0|7] ""  GW
+
 BO_ 788 ADAS_0x314: 8 ADAS
  SG_ ADAS_314_CheckSum : 7|8@0+ (1,0) [0|255] ""  FCM,GW
  SG_ ADAS_314_AliveCounter : 11|4@0+ (1,0) [0|14] ""  FCM,GW
@@ -701,6 +713,17 @@ CM_ SG_ 532 VCU_214_SSecOC_MAC_Byte0 "Short SecOC MAC signal byte 0 on CAN";
 CM_ SG_ 532 VCU_214_SSecOC_MAC_Byte1 "Short SecOC MAC signal byte 1 on CAN";
 CM_ SG_ 532 VCU_214_SSecOC_MAC_Byte2 "Short SecOC MAC signal byte 2 on CAN";
 Resolution should be 360/254 degrees";
+CM_ BO_ 787 "Messages for ICC (IBUS 2) and Event Data Recorder (Chassis Bus)";
+CM_ SG_ 787 ADAS_313_CheckSum "ADAS_313_Message checksum  ( E2E data ID: 0x4B)";
+CM_ SG_ 787 ADAS_313_AliveCounter "ADAS_313_Message counter";
+CM_ SG_ 787 ADAS_FACM_Sts "FACM status";
+CM_ SG_ 787 ADAS_BACM_Sts "BACM status";
+CM_ SG_ 787 AEB_ReAEB_Sts "Status of Rear AEB function";
+CM_ SG_ 787 ADAS_Sts_ACC_ICC "Automatic Cruise Control (ACC) status";
+CM_ SG_ 787 ADAS_TJA_AutoSteerSts "Traffic Jam Assist (TJA) autosteer status";
+CM_ SG_ 787 ADAS_ISASts "ISA status_for ICC use to display either fault and confirm on_off";
+CM_ SG_ 787 ADAS_Sts_TLR "TLR status";
+CM_ SG_ 787 ADAS_TSRSts "TSR Information receive status ( Camera / Navi / fusion ) ";
 CM_ BO_ 788 "Messages for ICC (IBUS 2) and Event Data Recorder (Chassis Bus)";
 CM_ SG_ 788 ADAS_314_CheckSum "ADAS_314_Message checksum (  E2E data ID:0x4E)";
 CM_ SG_ 788 ADAS_314_AliveCounter "ADAS_314_Message counter";
@@ -3177,6 +3200,14 @@ VAL_ 532 VCU_BrkSigVld 0 "Initializing" 1 "Valid" 2 "Invalid" 3 "Reserved" ;
 VAL_ 532 VCU_DrvModSigFb 0 "Eco" 1 "Normal" 2 "Sport" 3 "Custom" 4 "Snow" 5 "Offroad" 6 "Valet" 7 "Invalid" ;
 VAL_ 532 VCU_DrvModShiftMisoper 0 "Normal" 1 "Abnormal" ;
 VAL_ 532 VCU_SpclTerrainModEnaSig 0 "Not_enabled" 1 "Enable" ;
+VAL_ 787 ADAS_FACM_Sts 0 "UaCMX" 1 "DsblCMX" 2 "StdbyCMX" 3 "StdbyDgrdCMX" 4 "ActvCMX" 5 "ActvDgrdCMX" 6 "ErrCMX" 7 "ActvDgrd1CMX" 8 "ActvDgrd2CMX" 9 "DsblDgrdCMX" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
+VAL_ 787 ADAS_BACM_Sts 0 "UaCMX" 1 "DsblCMX" 2 "StdbyCMX" 3 "StdbyDgrdCMX" 4 "ActvCMX" 5 "ActvDgrdCMX" 6 "ErrCMX" 7 "ActvDgrd1CMX" 8 "ActvDgrd2CMX" 9 "DsblDgrdCMX" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
+VAL_ 787 AEB_ReAEB_Sts 0 "UaCMX" 1 "DsblCMX" 2 "StdbyCMX" 3 "StdbyDgrdCMX" 4 "ActvCMX" 5 "ActvDgrdCMX" 6 "ErrCMX" 7 "ActvDgrd1CMX" 8 "ActvDgrd2CMX" 9 "DsblDgrdCMX" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
+VAL_ 787 ADAS_Sts_ACC_ICC 0 "ACC_Off" 1 "Initialization" 2 "Standby" 3 "Active" 4 "Override" 5 "Standstill_active" 6 "Standstill_wait" 7 "Deactivation_brake" 8 "Deactivation_other" 9 "Failure_reversible" 10 "Failure_irreversible" 11 "Standstill_GoNotification" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
+VAL_ 787 ADAS_TJA_AutoSteerSts 0 "Off_Unavailable" 1 "Off_Available" 2 "On_Standby" 3 "Active_lane_following" 4 "Active_object_following" 5 "Driver_override" 6 "Fault" 7 "Reserved" ;
+VAL_ 787 ADAS_ISASts 0 "Off" 1 "Available" 2 "Active" 3 "Error" ;
+VAL_ 787 ADAS_Sts_TLR 0 "Off" 1 "Available" 2 "Active" 3 "Error" ;
+VAL_ 787 ADAS_TSRSts 0 "Reserved" 1 "Off" 2 "Fusion_Mode" 3 "Vision_Mode" 4 "Navigation_Mode" 5 "Error" 6 "Reserved" 7 "Reserved" ;
 VAL_ 788 ADAS_ESAState 0 "ESA_OffCoded" 1 "ESA_Off" 2 "Inactve" 3 "ESA_Actv_RequestTpfLT" 4 "ESA_Actv_RequestTpfRT" 5 "Actv_SteeringLT" 6 "Actv_SteeringRT" 7 "ESA_RampoutLe" 8 "ESA_RampoutRi" 9 "ESA_Error" 10 "Unavailable" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
 VAL_ 788 ADAS_LKASts 0 "LKA_OffCoded" 1 "LKA_Off" 2 "Inactve" 3 "ReadyToAssist" 4 "LKA_WarningLT" 5 "LKA_WarningRT" 6 "Actv_SteeringLT" 7 "Actv_SteeringRT" 8 "LKA_Error" 9 "Reserved" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
 VAL_ 788 ADAS_ELKASts 0 "ELKA_OffCoded" 1 "LKA_Off" 2 "Inactve" 3 "ReadyToAssist" 4 "ELKA_WarningLT" 5 "ELKA_WarningRT" 6 "Actv_SteeringLT" 7 "Actv_SteeringRT" 8 "ELKA_Error" 9 "Reserved" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;

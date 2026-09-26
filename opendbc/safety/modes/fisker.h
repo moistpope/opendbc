@@ -18,7 +18,7 @@
 //   RX  0x318  vehicle speed + brake pedal
 //   RX  0x1C2  EPS steering angle
 //   RX  0x1C4  EPS driver torque
-//   RX  0x358  VCU basic-CC state (cruise engaged / main on)
+//   RX  0x313  ADAS ACC state (bus 2) -> cruise engaged
 
 static bool fisker_longitudinal = false;
 
@@ -73,31 +73,6 @@ static void fisker_rx_hook(const CANPacket_t *msg) {
       vehicle_moving = whl_rf > 0;
     }
 
-    // VCU_0x358: basic cruise-control state (VCU_Sts_CC_ICC, 4-bit @ start 35 -> data[4]
-    // low nibble). openpilot replaces the ADAS module (isolated on the intercept side, so
-    // its ADAS_0x313 ACC state isn't natively on this bus), and the car uses the VCU's
-    // basic cruise, which is gateway-sourced and native to bus 0. Enum: 3=Active,
-    // 4=Override; 9/10=Fault.
-    //
-    // NOTE: acc_main_on is intentionally NOT set from cc_state on fisker. Panda's MADS
-    // state machine treats acc_main rising as an implicit MADS engagement trigger and
-    // acc_main falling as a forced MADS disengagement. On the Ocean's 2-step ACC UX:
-    //   - RiBtnNorth press: cc_state 0->2 (Off->Standby). This is only "ready cruise",
-    //     NOT a MADS engagement moment. Firing acc_main-rising would open lat here and
-    //     block OEM's 0x1D0 => LKA fault the moment the user preps cruise.
-    //   - Brake during cruise: cc_state 3->2 (Active->Standby). Sunnypilot default
-    //     "steering_mode_on_brake = Remain Active" wants MADS to stay engaged. If
-    //     acc_main were true at cc=3 and false at cc=2, brake would falling-edge and
-    //     forcibly disengage MADS regardless of the user's steering-mode setting.
-    // Leaving acc_main_on at its default (false) sidesteps both. MADS is engaged on this
-    // port only via mads_button (RiBtnSouth on MFS_0x514 above) or via op_controls_allowed
-    // rising when cruise actually engages (pcm_cruise_check below).
-    if (msg->addr == 0x358U) {
-      int cc_state = msg->data[4] & 0x0FU;
-      bool cruise_engaged = (cc_state == 3) || (cc_state == 4);
-      pcm_cruise_check(cruise_engaged);
-    }
-
     // MFS_0x514: MFSS steering-wheel buttons. MFS_RiBtnSouth (2-bit @ start 33, big-endian
     // -> byte 4 bits 0,1) is sunnypilot's MADS engage/disengage toggle. Any non-zero state
     // counts as pressed (1=short_press, 2=long_press, 3=reserved). Openpilot's carstate
@@ -106,6 +81,35 @@ static void fisker_rx_hook(const CANPacket_t *msg) {
     if (msg->addr == 0x514U) {
       int rbs = msg->data[4] & 0x03U;
       mads_button_press = (rbs != 0) ? MADS_BUTTON_PRESSED : MADS_BUTTON_NOT_PRESSED;
+    }
+  }
+
+  if (msg->bus == 2U) {
+    // ADAS_0x313: ACC state (ADAS_Sts_ACC_ICC, 4-bit @ start 35 -> data[4] low nibble),
+    // authored by the ADAS module on the cam side. ACC is enabled via the 0x52A ICC-settings
+    // override, so this is the cruise source. Engaged = 3=Active, 4=Override,
+    // 5=Standstill_active, 6=Standstill_wait, 11=Standstill_GoNotification (must match
+    // carstate.py). Others: 0=ACC_Off 1=Initialization 2=Standby 7=Deactivation_brake
+    // 8=Deactivation_other 9/10=Failure.
+    //
+    // NOTE: acc_main_on is intentionally NOT set from acc_state on fisker. Panda's MADS
+    // state machine treats acc_main rising as an implicit MADS engagement trigger and
+    // acc_main falling as a forced MADS disengagement. On the Ocean's 2-step ACC UX:
+    //   - RiBtnNorth press: ACC Off->Standby. This is only "ready cruise", NOT a MADS
+    //     engagement moment. Firing acc_main-rising would open lat here and block OEM's
+    //     0x1D0 => LKA fault the moment the user preps cruise.
+    //   - Brake during cruise: Active->Deactivation_brake->Standby. Sunnypilot default
+    //     "steering_mode_on_brake = Remain Active" wants MADS to stay engaged. If acc_main
+    //     followed the engaged state, brake would falling-edge and forcibly disengage MADS
+    //     regardless of the user's steering-mode setting.
+    // Leaving acc_main_on at its default (false) sidesteps both. MADS is engaged on this
+    // port only via mads_button (RiBtnSouth on MFS_0x514 above) or via op_controls_allowed
+    // rising when cruise actually engages (pcm_cruise_check below).
+    if (msg->addr == 0x313U) {
+      int acc_state = msg->data[4] & 0x0FU;
+      bool cruise_engaged = (acc_state == 3) || (acc_state == 4) || (acc_state == 5) ||
+                            (acc_state == 6) || (acc_state == 11);
+      pcm_cruise_check(cruise_engaged);
     }
   }
 }
@@ -219,7 +223,7 @@ static safety_config fisker_init(uint16_t param) {
     {.msg = {{0x318, 0, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // speed + brake
     {.msg = {{0x1C2, 0, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // steering angle
     {.msg = {{0x1C4, 0, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // driver torque
-    {.msg = {{0x358, 0, 8,  10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // VCU cruise-control state
+    {.msg = {{0x313, 2, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // ADAS ACC state
     // MFS_0x514 (MFSS buttons) whitelisted so our fisker_rx_hook actually runs on it —
     // the safety framework gates rx_hook execution on rx_checks membership. Without this,
     // our MFS_RiBtnSouth read in the rx hook was dead code and mads_button_press never
