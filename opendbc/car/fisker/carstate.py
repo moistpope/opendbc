@@ -40,6 +40,14 @@ _BUTTON_TYPE = {
 BUTTON_SIGNAL_TO_TYPE = {sig: _BUTTON_TYPE[name] for sig, name in BUTTON_MAP.items()}
 
 
+def get_new_frames(cp: CANParser, msg: str) -> list[dict[str, float]]:
+  """Every `msg` frame received since the last update, decoded, oldest first. vl_all holds all of
+  them (not just the latest), so a relay built on this never drops or duplicates a frame."""
+  sigs = cp.vl_all[msg]
+  n_frames = max((len(vals) for vals in sigs.values()), default=0)
+  return [{sig: vals[i] for sig, vals in sigs.items()} for i in range(n_frames)]
+
+
 class CarState(CarStateBase):
   def __init__(self, CP, CP_SP):
     super().__init__(CP, CP_SP)
@@ -69,6 +77,8 @@ class CarState(CarStateBase):
     # Every ICC_0x52A frame received on bus 0 since the last update, decoded. Carcontroller
     # re-sends each one (with overrides) to the ADAS module on bus 2 — see create_icc_settings.
     self.icc_settings_frames: list[dict[str, float]] = []
+    # Same for ICC_0x35B (SVS requests + BSD/DOW/APA settings) — see create_icc_0x35b.
+    self.icc_0x35b_frames: list[dict[str, float]] = []
 
     # Button state edge detection
     self._prev_button_state = {sig: 0 for sig in BUTTON_SIGNAL_TO_TYPE}
@@ -213,12 +223,10 @@ class CarState(CarStateBase):
     self.oem_1c0_alive = int(oem_1c0["ADAS_1C0_AliveCounter"])
     self.oem_1d0_secoc_wire_ctr = (int(oem_1d0["ADAS_1D0_SSecOC_Fresh_Byte0"]) >> 2) & 0x3F
 
-    # ---- ICC feature settings (0x52A, 200 ms) ----
-    # vl_all holds every frame since the last update (not just the latest), so no ICC frame is
-    # dropped or duplicated — each one maps to exactly one re-sent frame with the same counter.
-    icc52a = cp_pt.vl_all["ICC_0x52A"]
-    n_frames = len(icc52a["ICC_0x52A_AliveCounter"])
-    self.icc_settings_frames = [{sig: vals[i] for sig, vals in icc52a.items()} for i in range(n_frames)]
+    # ---- ICC frames relayed to the ADAS module by carcontroller ----
+    # One re-sent frame per ICC frame, in order (0x52A keeps the ICC's counter this way).
+    self.icc_settings_frames = get_new_frames(cp_pt, "ICC_0x52A")  # 200 ms
+    self.icc_0x35b_frames = get_new_frames(cp_pt, "ICC_0x35B")     # 200 ms + 3x 20 ms on change
 
     # ---- SecOC sync (GW_Syn_All 0x20) ----
     # Trip counter = 2 bytes BE, Reset counter = 3 bytes BE, MAC = 3 bytes.
@@ -266,6 +274,8 @@ class CarState(CarStateBase):
       # ICC feature settings (5 Hz). Not required for openpilot to run (NaN = no liveness
       # check); carcontroller rewrites each frame for the ADAS module.
       ("ICC_0x52A", float('nan')),
+      # ICC SVS requests + BSD/DOW/APA settings (5 Hz). Optional relay, not required either.
+      ("ICC_0x35B", float('nan')),
     ]
     # ADAS-authored messages live on the cam-side bus (bus 2). Panda forwards them
     # onto bus 0 for the cluster, but pandad tags each packet with the src bus it was

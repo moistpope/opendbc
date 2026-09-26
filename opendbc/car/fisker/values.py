@@ -113,15 +113,60 @@ SECOC_SYNC_MSG = (0x20, "GW_Syn_All")    # 50 ms, full 40-bit freshness on wire
 # enables ACC. Every other signal, the AliveCounter and the undocumented bits pass through from
 # the ICC's frame unchanged. Raw values; names from the DBC VAL_ tables.
 ICC_SETTINGS_OVERRIDES = {
-  "ICC_LKA_Setting": 2,                  # Warning_and_Steering
-  "ICC_ELKASteeringInterventionSet": 1,  # On
   "ICC_LaneTrajectorySetting": 1,        # On
   "ICC_ACCSwt": 1,                       # On
   "ICC_ACCAutoSpdSts": 0,                # Off
-  "ICC_ACCSpdStepSize": 0,               # Step_1_unit
+  "ICC_ACCSpdStepSize": 1,               # Step_5_unit
   "ICC_ACCFuncTyp": 2,                   # Advanced
   "ICC_ACCTiGapCfm": 0,                  # Default/No_Selection
+  "ICC_ActvStyGlblSetting": 1,           # 0=Onff 1=Off
 }
+
+
+# ICC_0x35B: surround-view (SVS) requests + BSD/DOW/DCAA/APA/park-assist/AHBA settings. No E2E
+# (no checksum/counter). Optional: while this dict is empty openpilot leaves 0x35B alone and
+# panda forwards the ICC's frame as-is. Once any override is set, openpilot re-sends every ICC
+# frame to the ADAS module (bus 2) with these signals replaced; everything else, including the
+# undocumented bits, passes through unchanged. Raw values; names from the DBC VAL_ tables.
+ICC_0x35B_OVERRIDES: dict[str, int] = {
+  "ICC_EnbLnChgAsst": 1,          # 0=Auto_steer_not_enabled 1=Auto_steer_enabled
+  "ICC_BSDSetting": 3,            # 0=OFF 1=ON_with_Visual 2=ON_with_visual_and_audio
+  #                                 #   3=ON_with_visual_and_audio_and_Steering_Wheel_Vibration
+  # "ICC_BSD_Sensitivity": 0,       # 0=Normal 1=Early 2=Late_or_reduced
+  # "ICC_DOW_Setting": 2,           # 0=OFF 1=ON_with_Visual 2=ON_with_visual_and_audio
+  # "ICC_DCAASetting": 1,           # 0=OFF 1=ON
+  "ICC_AHBA_Setting": 1,          # 0=Off 1=On
+  # "ICC_WarnTypeSetting": 2,       # 0=OFF 1=ON_with_Visual 2=ON_with_visual_and_audio
+  #                                 #   3=ON_with_visual_and_audio_and_Steering_Wheel_Vibration
+  # "ICC_LKA_SettingWrnTyp": 1,     # 0=Audio_Visual_and_Haptic 1=Visual_and_Audio
+  "ICC_SteerWhlVibrSet": 1,       # 0=Off 1=On
+  "ICC_APA_Setting": 2,           # 0=Coded_off_(not_equipped) 1=Off_(by_user) 2=Enabled
+  "ICC_APAParkInDirSetting": 1,   # 0=Nose-in 1=Back-in
+  "ICC_APAParkOutDirSetting": 1,  # 0=Right 1=Left
+  "ICC_ParkAsstChmAlrt": 1,       # 0=Off 1=On
+  "ICC_WSPPA_Setting": 1,         # 0=No_curb_protection 1=Warning_only 2=Braking_intervention
+  "ICC_RAP_Setting": 1,           # 0=Remote_Automated_Parking_Disabled 1=..._Enabled
+  "ICC_TP_Setting": 1,            # 0=Trained_Parking_Disabled 1=Trained_Parking_Enabled
+  # Also in this frame but momentary user actions, not settings — overriding one holds it
+  # asserted on every frame: ICC_APAParkSelect (slot), ICC_APAActivation (1=On starts APA),
+  # ICC_APAParkOutAct (1=Request starts park-out).
+}
+
+# Live user interactions with the camera view — always passed through from the ICC's frame.
+ICC_0x35B_PASSTHROUGH = frozenset({
+  "ICC_ViewReq",
+  "ICC_ShowSts",
+  "ICC_SVS_AutoVwBttnReq",
+  "ICC_SVS_CamVwCnclReq",
+  "ICC_AutomaticViewReq",
+  "ICC_360FreeFloatingReq",
+  "ICC_GraphicOverlayReq",
+  "ICC_OperationType",
+  "ICC_ZOOM_Start",
+  "ICC_ZOOM_End",
+  "ICC_ZOOM_ScalingFactor",
+})
+assert not (ICC_0x35B_OVERRIDES.keys() & ICC_0x35B_PASSTHROUGH), "ICC_0x35B pass-through signals can't be overridden"
 
 
 # No FW-version fingerprinting for Fisker: FW_VERSIONS is intentionally empty

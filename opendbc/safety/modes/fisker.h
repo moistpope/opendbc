@@ -14,6 +14,7 @@
 //   TX  0x117  ADAS long control status   plain E2E, Sts/Typ (CC -> ACC transition)
 //   TX  0x118  ADAS long/ESP handshake    plain E2E, ESP-side mirror + jerk/prefill/AEB
 //   TX  0x52A  ICC feature settings       bus 2 (to the ADAS module), plain E2E — see below
+//   TX  0x35B  ICC SVS/BSD/APA settings   bus 2 (to the ADAS module), no E2E — optional relay
 //   RX  0x115  wheel speeds -> vehicle_moving
 //   RX  0x318  vehicle speed + brake pedal
 //   RX  0x1C2  EPS steering angle
@@ -29,8 +30,18 @@ static bool fisker_longitudinal = false;
 // loses 0x52A (and, since the counter is the ICC's, sees no counter jump at the handoff).
 // openpilot is already sending when this safety mode starts, so the window opens at init —
 // otherwise the ICC's first frame would be forwarded alongside our copy with the same counter.
-#define FISKER_ICC_SETTINGS_TIMEOUT_US 500000U  // 2.5 missed 200 ms cycles
+#define FISKER_ICC_RELAY_TIMEOUT_US 500000U  // 2.5 missed 200 ms cycles
 static uint32_t fisker_icc_settings_tx_last = 0U;
+
+// ICC_0x35B (SVS view requests + BSD/DOW/APA settings, 200 ms): same relay, but optional —
+// openpilot only sends it when settings overrides are configured. No counter on this message,
+// so the ICC's original is blocked only once openpilot's copies are actually arriving.
+static bool fisker_icc_0x35b_tx_seen = false;
+static uint32_t fisker_icc_0x35b_tx_last = 0U;
+
+static bool fisker_icc_relay_active(uint32_t tx_last) {
+  return safety_get_ts_elapsed(microsecond_timer_get(), tx_last) < FISKER_ICC_RELAY_TIMEOUT_US;
+}
 
 // Steering: raw CAN at 0.0625 deg/LSB, offset -780 deg. Raw 12480 == 0 deg.
 #define FISKER_ANGLE_ZERO_CAN 12480
@@ -190,6 +201,10 @@ static bool fisker_tx_hook(const CANPacket_t *msg) {
   if ((msg->addr == 0x52AU) && (msg->bus == 2U)) {
     fisker_icc_settings_tx_last = microsecond_timer_get();
   }
+  if ((msg->addr == 0x35BU) && (msg->bus == 2U)) {
+    fisker_icc_0x35b_tx_seen = true;
+    fisker_icc_0x35b_tx_last = microsecond_timer_get();
+  }
 
   return tx;
 }
@@ -201,13 +216,14 @@ static safety_config fisker_init(uint16_t param) {
   // disable_static_blocking lets fisker_fwd_hook forward the OEM's 0x1D0 when disengaged
   // and block it only while openpilot steers; check_relay still guards against the OEM's
   // steering leaking onto bus 0.
-  // 0x52A goes to the ADAS module on bus 2. No check_relay: a relay malfunction stops ALL
+  // 0x52A/0x35B go to the ADAS module on bus 2. No check_relay: a relay malfunction stops ALL
   // forwarding, and 0x52A seen on bus 2 isn't reliable evidence of one. fisker_fwd_hook blocks
-  // the ICC's original instead.
+  // the ICC's originals instead.
   static const CanMsg FISKER_TX_MSGS[] = {
     {0x1D0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // steering angle
     {0x1C0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // lateral activation
     {0x52A, 2, 8, .check_relay = false},                                    // ICC feature settings
+    {0x35B, 2, 8, .check_relay = false},                                    // ICC SVS/BSD/APA settings
   };
   static const CanMsg FISKER_LONG_TX_MSGS[] = {
     {0x1D0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // steering angle
@@ -216,6 +232,7 @@ static safety_config fisker_init(uint16_t param) {
     {0x117, 0, 8, .check_relay = true, .disable_static_blocking = true},    // long control status
     {0x118, 0, 8, .check_relay = true, .disable_static_blocking = true},    // long/ESP handshake
     {0x52A, 2, 8, .check_relay = false},                                    // ICC feature settings
+    {0x35B, 2, 8, .check_relay = false},                                    // ICC SVS/BSD/APA settings
   };
 
   static RxCheck fisker_rx_checks[] = {
@@ -241,6 +258,8 @@ static safety_config fisker_init(uint16_t param) {
   fisker_longitudinal = GET_FLAG(param, FISKER_FLAG_LONGITUDINAL_CONTROL);
 
   fisker_icc_settings_tx_last = microsecond_timer_get();
+  fisker_icc_0x35b_tx_seen = false;
+  fisker_icc_0x35b_tx_last = 0U;
 
   // cppcheck-suppress knownConditionTrueFalse
   return fisker_longitudinal ? BUILD_SAFETY_CFG(fisker_rx_checks, FISKER_LONG_TX_MSGS)
@@ -257,8 +276,10 @@ static bool fisker_fwd_hook(int bus_num, int addr) {
   // ICC feature settings (0x52A, ICC -> ADAS module): openpilot sends its rewritten copy on
   // bus 2, so drop the ICC's original — but only while openpilot's copies keep arriving.
   if ((bus_num == 0) && (addr == 0x52A)) {
-    uint32_t ts_elapsed = safety_get_ts_elapsed(microsecond_timer_get(), fisker_icc_settings_tx_last);
-    block_msg = ts_elapsed < FISKER_ICC_SETTINGS_TIMEOUT_US;
+    block_msg = fisker_icc_relay_active(fisker_icc_settings_tx_last);
+  }
+  if ((bus_num == 0) && (addr == 0x35B)) {
+    block_msg = fisker_icc_0x35b_tx_seen && fisker_icc_relay_active(fisker_icc_0x35b_tx_last);
   }
   if (bus_num == 2) {
     // steering angle (0x1D0) + lateral activation (0x1C0): openpilot replaces both while

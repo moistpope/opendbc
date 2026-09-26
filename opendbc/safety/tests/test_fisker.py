@@ -84,6 +84,67 @@ class TestFiskerIccSettings(unittest.TestCase):
     self.assertFalse(self.safety.get_relay_malfunction())
 
 
+class TestFiskerIcc0x35B(unittest.TestCase):
+  """ICC_0x35B: optional relay — the ICC's original is only blocked once openpilot's copies are
+  actually arriving on bus 2, and forwarding resumes if they stop."""
+
+  ADDR = 0x35B
+
+  def setUp(self):
+    self.safety = libsafety_py.libsafety
+    self.safety.set_timer(0)  # init_tests() also resets the timer to 0; keep init's timestamp consistent
+    self.safety.set_safety_hooks(CarParams.SafetyModel.fisker, 0)
+    self.safety.init_tests()
+
+  def _tx(self, bus):
+    return self.safety.safety_tx_hook(common.make_msg(bus, self.ADDR, 8))
+
+  def _fwd(self, bus):
+    return self.safety.safety_fwd_hook(bus, self.ADDR)
+
+  def test_tx_allowed_on_adas_bus_only(self):
+    for param in (0, 1):
+      self.safety.set_safety_hooks(CarParams.SafetyModel.fisker, param)
+      self.assertTrue(self._tx(2))
+      self.assertFalse(self._tx(0))
+      self.assertFalse(self._tx(1))
+
+  def test_forwarded_while_openpilot_not_relaying(self):
+    # no overrides configured -> openpilot never sends 0x35B -> ICC's frame always forwarded
+    for t in (0, TIMEOUT_US, 10 * TIMEOUT_US):
+      self.safety.set_timer(t)
+      self.assertEqual(self._fwd(0), 2)
+
+  def test_blocked_while_openpilot_relays(self):
+    for t in range(0, 5_000_000, 200_000):
+      self.safety.set_timer(t)
+      self.assertTrue(self._tx(2))
+      self.assertEqual(self._fwd(0), -1)
+    self.safety.set_timer(t + TIMEOUT_US - 1)
+    self.assertEqual(self._fwd(0), -1)
+    self.safety.set_timer(t + TIMEOUT_US)
+    self.assertEqual(self._fwd(0), 2)
+
+  def test_reset_on_safety_mode_init(self):
+    self.assertTrue(self._tx(2))
+    self.assertEqual(self._fwd(0), -1)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.fisker, 0)
+    self.assertEqual(self._fwd(0), 2)
+
+  def test_independent_of_0x52a(self):
+    # relaying 0x52A doesn't block 0x35B, and vice versa
+    self.assertTrue(self.safety.safety_tx_hook(common.make_msg(2, ICC_SETTINGS, dat=ICC_FRAME)))
+    self.assertEqual(self._fwd(0), 2)
+    self.safety.set_timer(TIMEOUT_US)
+    self.assertTrue(self._tx(2))
+    self.assertEqual(self._fwd(0), -1)
+    self.assertEqual(self.safety.safety_fwd_hook(0, ICC_SETTINGS), 2)
+
+  def test_adas_side_not_blocked(self):
+    self.assertTrue(self._tx(2))
+    self.assertEqual(self._fwd(2), 0)
+
+
 class TestFiskerCruiseState(unittest.TestCase):
   """Cruise engagement follows the ADAS module's ACC state (ADAS_0x313, bus 2)."""
 

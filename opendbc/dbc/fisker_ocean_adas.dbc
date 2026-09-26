@@ -466,6 +466,40 @@ BO_ 856 VCU_0x358: 8 GW
  SG_ VCU_OTAVehCdnChk_ASIL : 49|2@0+ (1,0) [0|3] ""  ADAS,FCM,PKC
  SG_ VCU_OTAVehInhb_ASIL_Fb : 51|2@0+ (1,0) [0|3] ""  ADAS,FCM,PKC
 
+BO_ 859 ICC_0x35B: 8 GW
+ SG_ ICC_0x35B_Undoc_Byte0 : 7|8@0+ (1,0) [0|255] ""  ADAS
+ SG_ ICC_0x35B_Undoc_Bits8_11 : 11|4@0+ (1,0) [0|15] ""  ADAS
+ SG_ ICC_ViewReq : 15|4@0+ (1,0) [0|15] ""  ADAS
+ SG_ ICC_ShowSts : 16|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_SVS_AutoVwBttnReq : 17|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_SVS_CamVwCnclReq : 18|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_AutomaticViewReq : 19|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_360FreeFloatingReq : 20|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_GraphicOverlayReq : 21|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_OperationType : 23|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_ZOOM_Start : 24|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ZOOM_End : 25|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ZOOM_ScalingFactor : 30|5@0+ (1,0) [0|31] ""  ADAS
+ SG_ ICC_EnbLnChgAsst : 31|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_BSDSetting : 33|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_DOW_Setting : 35|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_DCAASetting : 37|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_APA_Setting : 39|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_APAParkSelect : 43|4@0+ (1,0) [0|15] ""  ADAS
+ SG_ ICC_APAActivation : 44|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_APAParkInDirSetting : 45|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_APAParkOutDirSetting : 46|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ParkAsstChmAlrt : 47|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_WSPPA_Setting : 49|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_AHBA_Setting : 50|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_APAParkOutAct : 52|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_SteerWhlVibrSet : 53|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_WarnTypeSetting : 55|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_LKA_SettingWrnTyp : 57|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_RAP_Setting : 59|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_TP_Setting : 61|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_BSD_Sensitivity : 63|2@0+ (1,0) [0|3] ""  ADAS
+
 BO_ 1300 MFS_0x514: 8 GW
  SG_ MFS_0x514_CheckSum : 7|8@0+ (1,0) [0|255] ""  ADAS
  SG_ MFS_0x514_AliveCounter : 11|4@0+ (1,0) [0|14] ""  ADAS
@@ -914,6 +948,35 @@ Resolution should be 360/254 degrees
 ";
 ";
 ";
+CM_ SG_ 859 ICC_0x35B_Undoc_Byte0 "Not in the spec. Defined only so repacking preserves it";
+CM_ SG_ 859 ICC_0x35B_Undoc_Bits8_11 "Not in the spec. Defined only so repacking preserves it";
+CM_ SG_ 859 ICC_ViewReq "Request from ICC to activates Surround View";
+CM_ SG_ 859 ICC_SVS_AutoVwBttnReq "This signal incidates if the user selects automatic camera view";
+CM_ SG_ 859 ICC_SVS_CamVwCnclReq "This signal incidates if the user presses the button to exit camera view.";
+CM_ SG_ 859 ICC_AutomaticViewReq "To enable or disabled the automatic view from ICC setting menu";
+CM_ SG_ 859 ICC_360FreeFloatingReq "To enable or disabled the automatic view from ICC setting menu";
+CM_ SG_ 859 ICC_GraphicOverlayReq "To enable or disable viewing of graphic overlays presented in the LVDS viewport";
+CM_ SG_ 859 ICC_OperationType "This signal conveys different types of user operations";
+CM_ SG_ 859 ICC_ZOOM_Start "Zoom operations start status";
+CM_ SG_ 859 ICC_ZOOM_End "Zoom operation end status";
+CM_ SG_ 859 ICC_ZOOM_ScalingFactor "Floating point value between 0-32 to represent the amount of zoom";
+CM_ SG_ 859 ICC_EnbLnChgAsst "Signal request for LCA activation in user settings";
+CM_ SG_ 859 ICC_BSDSetting "Blind Spot Detection (BSD) user option setting";
+CM_ SG_ 859 ICC_DOW_Setting "Door Open Warning (DOW) user options setting";
+CM_ SG_ 859 ICC_DCAASetting "Driver Condition and Attention Assist (DCAA) user option setting";
+CM_ SG_ 859 ICC_APA_Setting "Feature on/off setting";
+CM_ SG_ 859 ICC_APAParkSelect "Status of slot selection by user through HMI";
+CM_ SG_ 859 ICC_APAActivation "User can activte by pressing P button or voice. Pressing P button again cancels it.";
+CM_ SG_ 859 ICC_APAParkInDirSetting "Parking in preference by user - vertical parking";
+CM_ SG_ 859 ICC_APAParkOutDirSetting "Parking out preference by user - vertical parking";
+CM_ SG_ 859 ICC_ParkAsstChmAlrt "Parking assist / APA audio aler preference by user ";
+CM_ SG_ 859 ICC_WSPPA_Setting "Wheel scratch protection preference by user";
+CM_ SG_ 859 ICC_APAParkOutAct "Signal indicating the Park Out maneuver is started";
+CM_ SG_ 859 ICC_SteerWhlVibrSet "signal for steering wheel vibration selection on CID for LKA ";
+CM_ SG_ 859 ICC_LKA_SettingWrnTyp "ICC setting signal for lane support";
+CM_ SG_ 859 ICC_RAP_Setting "ICC setting to enable or disable the Remote Automated Parking (RAP). If enabled driver can control the RAP outside the vehicle (Feature in Standby).";
+CM_ SG_ 859 ICC_TP_Setting "ICC setting to enable or disable the Trained Parking (TP). If enabled driver can control the TP outside the vehicle (Feature in Standby)";
+CM_ SG_ 859 ICC_BSD_Sensitivity "Senstivity Setting for Blind Spot detection";
 CM_ SG_ 1300 MFS_0x514_CheckSum "MFS_0x514_Message check (0xC5)_CheckSum";
 CM_ SG_ 1300 MFS_0x514_AliveCounter "MFS_0x514_Message counterAliveCounter";
 CM_ SG_ 1300 MFS_LeRollUp "Left roller (up)";
@@ -3362,6 +3425,35 @@ VAL_ 856 VCU_OTARdy_Fb 0 "Initial" 1 "Ready" 2 "Not_Ready" 3 "Invalid" ;
 VAL_ 856 VCU_OTA_ECUInhb_Req 0 "Init" 1 "Inhibit_Request" 2 "No_Inhibit_request" 3 "Invalid" ;
 VAL_ 856 VCU_OTAVehCdnChk_ASIL 0 "OTA_veh_cond_not_ok" 1 "OTA_veh_cond_ok" 2 "Fault" 3 "Invalid" ;
 VAL_ 856 VCU_OTAVehInhb_ASIL_Fb 0 "Inhibition_not_ok" 1 "Inhibition_ok" 2 "Reserved" 3 "Invalid" ;
+VAL_ 859 ICC_ViewReq 0 "None" 1 "Front_Normal_View" 2 "Left_Flank_3D_view" 3 "Right_Flank_3D_View" 4 "Rear_Normal_View" 5 "Curb_View_or_split_view" 6 "360_View_or_3D_Freefloating_view" 7 "Front_Cross_Path_View" 8 "Rear_Cross_Path_View" 9 "Reserved" 10 "Reserved" 11 "Reserved" 12 "Reserved" 13 "Reserved" 14 "Reserved" 15 "Reserved" ;
+VAL_ 859 ICC_ShowSts 0 "Not_Show" 1 "Show" ;
+VAL_ 859 ICC_SVS_AutoVwBttnReq 0 "Auto_camera_view_not_requested" 1 "Auto_camera_view_requested" ;
+VAL_ 859 ICC_SVS_CamVwCnclReq 0 "Camera__view_port_exit_button_not_pressed" 1 "Camera__view_port_exit_button_pressed" ;
+VAL_ 859 ICC_AutomaticViewReq 0 "Off" 1 "On" ;
+VAL_ 859 ICC_360FreeFloatingReq 0 "Off" 1 "On" ;
+VAL_ 859 ICC_GraphicOverlayReq 0 "Off" 1 "On" ;
+VAL_ 859 ICC_OperationType 0 "No_Request" 1 "PINCH_ZOOM" 2 "QUICK_ZOOM_(double_tap)" 3 "PAN_(swipe)" ;
+VAL_ 859 ICC_ZOOM_Start 0 "NO" 1 "Yes" ;
+VAL_ 859 ICC_ZOOM_End 0 "NO" 1 "Yes" ;
+VAL_ 859 ICC_EnbLnChgAsst 0 "Auto_steer_not_enabled" 1 "Auto_steer_enabled" ;
+VAL_ 859 ICC_BSDSetting 0 "OFF" 1 "ON_with_Visual" 2 "ON_with_visual_and_audio" 3 "ON_with_visual_and_audio_and_Steering_Wheel_Vibration" ;
+VAL_ 859 ICC_DOW_Setting 0 "OFF" 1 "ON_with_Visual" 2 "ON_with_visual_and_audio" 3 "Reserved" ;
+VAL_ 859 ICC_DCAASetting 0 "OFF" 1 "ON" 2 "Reserved" 3 "Reserved" ;
+VAL_ 859 ICC_APA_Setting 0 "Coded_off_(not_equipped)" 1 "Off_(by_user)" 2 "Enabled" 3 "Reserved" ;
+VAL_ 859 ICC_APAParkSelect 0 "Slot_not_selected" 1 "Slot_1" 2 "Slot_2" 3 "Slot_3" 4 "Slot_4" 5 "Slot_5" 6 "Slot_6" 7 "Resreved" 8 "Resreved" 9 "Resreved" 10 "Resreved" 11 "Resreved" 12 "Resreved" 13 "Resreved" 14 "Resreved" 15 "Resreved" ;
+VAL_ 859 ICC_APAActivation 0 "Cancel" 1 "On" ;
+VAL_ 859 ICC_APAParkInDirSetting 0 "Nose-in" 1 "Back-in" ;
+VAL_ 859 ICC_APAParkOutDirSetting 0 "Right" 1 "Left" ;
+VAL_ 859 ICC_ParkAsstChmAlrt 0 "Off" 1 "On" ;
+VAL_ 859 ICC_WSPPA_Setting 0 "No_curb_protection" 1 "Warning_only" 2 "Braking_intervention" 3 "Reserved" ;
+VAL_ 859 ICC_AHBA_Setting 0 "Off" 1 "On" ;
+VAL_ 859 ICC_APAParkOutAct 0 "No_request" 1 "Request" ;
+VAL_ 859 ICC_SteerWhlVibrSet 0 "Off" 1 "On" ;
+VAL_ 859 ICC_WarnTypeSetting 0 "OFF" 1 "ON_with_Visual" 2 "ON_with_visual_and_audio" 3 "ON_with_visual_and_audio_and_Steering_Wheel_Vibration" ;
+VAL_ 859 ICC_LKA_SettingWrnTyp 0 "Audio_Visual_and_Haptic" 1 "Visual_and_Audio" 2 "Reserved" 3 "Reserved" ;
+VAL_ 859 ICC_RAP_Setting 0 "Remote_Automated_Parking_Disabled" 1 "Remote_Automated_Parking_Enabled" 2 "Reserved" 3 "Reserved" ;
+VAL_ 859 ICC_TP_Setting 0 "Trained_Parking_Disabled" 1 "Trained_Parking_Enabled" 2 "Reserved" 3 "Reserved" ;
+VAL_ 859 ICC_BSD_Sensitivity 0 "Normal" 1 "Early" 2 "Late_or_reduced" 3 "Reserved" ;
 VAL_ 1300 MFS_LeBtnNorth 0 "No_Pressed" 1 "Pressed" 2 "Long_Press" 3 "Reserved" ;
 VAL_ 1300 MFS_LeBtnSouth 0 "No_Pressed" 1 "Pressed" 2 "Long_Press" 3 "Reserved" ;
 VAL_ 1300 MFS_LeBtnWest 0 "No_Pressed" 1 "Pressed" 2 "Long_Press" 3 "Reserved" ;

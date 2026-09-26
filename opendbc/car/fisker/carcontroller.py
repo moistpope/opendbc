@@ -8,7 +8,7 @@ from opendbc.car.lateral import apply_std_steer_angle_limits
 
 from opendbc.car.fisker.fiskercan import FiskerCAN
 from opendbc.car.fisker.secoc import stamp_secoc, sync_mac
-from opendbc.car.fisker.values import CarControllerParams
+from opendbc.car.fisker.values import CarControllerParams, ICC_0x35B_OVERRIDES
 
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -254,6 +254,13 @@ class CarController(CarControllerBase):
     # if we stop, panda's fallback forwards the ICC's frames without a counter jump.
     for icc_values in CS.icc_settings_frames:
       can_sends.append(self.fcan.create_icc_settings(icc_values))
+
+    # ---- ICC SVS / BSD / APA settings (0x35B, ICC on bus 0 -> ADAS module on bus 2) ----
+    # Optional: only relayed when ICC_0x35B_OVERRIDES has entries. Panda blocks the ICC's own
+    # 0x35B only while our copies are arriving, so with no overrides it's forwarded untouched.
+    if ICC_0x35B_OVERRIDES:
+      for icc_values in CS.icc_0x35b_frames:
+        can_sends.append(self.fcan.create_icc_0x35b(icc_values))
 
     # ---- HUD ----
     # Forwarding intercept: the OEM ADAS module stays alive on bus 2 and the panda
