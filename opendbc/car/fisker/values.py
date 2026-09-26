@@ -108,6 +108,22 @@ SECOC_TX_MSGS = {
 SECOC_SYNC_MSG = (0x20, "GW_Syn_All")    # 50 ms, full 40-bit freshness on wire
 
 
+# ICC_0x52A feature-settings overrides. The ICC's own 0x52A (bus 0) is blocked by panda and
+# openpilot re-sends it to the ADAS module (bus 2) with these signals replaced — this is what
+# enables ACC. Every other signal, the AliveCounter and the undocumented bits pass through from
+# the ICC's frame unchanged. Raw values; names from the DBC VAL_ tables.
+ICC_SETTINGS_OVERRIDES = {
+  "ICC_LKA_Setting": 2,                  # Warning_and_Steering
+  "ICC_ELKASteeringInterventionSet": 1,  # On
+  "ICC_LaneTrajectorySetting": 1,        # On
+  "ICC_ACCSwt": 1,                       # On
+  "ICC_ACCAutoSpdSts": 0,                # Off
+  "ICC_ACCSpdStepSize": 0,               # Step_1_unit
+  "ICC_ACCFuncTyp": 2,                   # Advanced
+  "ICC_ACCTiGapCfm": 0,                  # Default/No_Selection
+}
+
+
 # No FW-version fingerprinting for Fisker: FW_VERSIONS is intentionally empty
 # (single-model port, CAN fingerprint is authoritative), so declare zero requests
 # to keep the brand out of fw_versions.get_brand_ecu_matches — otherwise upstream's

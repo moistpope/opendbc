@@ -19,6 +19,10 @@ NON_SECOC_FRAMES = [
   (0x117, bytes.fromhex("4A00484050000038")),
   # 0x118 ADAS ESP handshake, DataID=81, DataLength=64
   (0x118, bytes.fromhex("32014A48441080D2")),
+  # 0x52A ICC feature settings, DataID=0xF5, DataLength=64
+  (0x52A, bytes.fromhex("1C2024A000008220")),
+  (0x52A, bytes.fromhex("A72C24A000008220")),
+  (0x52A, bytes.fromhex("1D2E24A000008220")),
 ]
 
 # SecOC-protected frames — CRC covers only bytes 1..3 (DataLength=32)

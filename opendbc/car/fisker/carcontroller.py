@@ -246,6 +246,15 @@ class CarController(CarControllerBase):
         can_sends.append(self.fcan.create_long_esp_handshake(long_active, gas_override,
                                                               counter=alive))
 
+    # ---- ICC feature settings (0x52A, ICC on bus 0 -> ADAS module on bus 2) ----
+    # Always on, independent of engagement: panda blocks the ICC's own 0x52A from reaching the
+    # ADAS module for as long as we keep sending, and we re-send each ICC frame with
+    # ICC_SETTINGS_OVERRIDES applied (this is what enables ACC). The ICC's AliveCounter is
+    # carried through unchanged, so the ADAS module sees one continuous counter sequence — and
+    # if we stop, panda's fallback forwards the ICC's frames without a counter jump.
+    for icc_values in CS.icc_settings_frames:
+      can_sends.append(self.fcan.create_icc_settings(icc_values))
+
     # ---- HUD ----
     # Forwarding intercept: the OEM ADAS module stays alive on bus 2 and the panda
     # forwards its status/HUD frames (ACC HUD 0x31C, warning HUD 0x317) to the cluster,

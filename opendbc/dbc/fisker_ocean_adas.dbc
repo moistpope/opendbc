@@ -474,6 +474,38 @@ BO_ 1300 MFS_0x514: 8 GW
  SG_ MFS_Ri_Fail : 49|2@0+ (1,0) [0|3] ""  ADAS
  SG_ MFS_Le_Fail : 51|2@0+ (1,0) [0|3] ""  ADASBUS_Virtual_ECU
 
+BO_ 1322 ICC_0x52A: 8 GW
+ SG_ ICC_0x52A_CheckSum : 7|8@0+ (1,0) [0|255] ""  ADAS
+ SG_ ICC_0x52A_AliveCounter : 11|4@0+ (1,0) [0|14] ""  ADAS
+ SG_ ICC_FACM_DynmcSenstvty : 12|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_UsrProfTiGapSet : 15|3@0+ (1,0) [0|7] ""  ADAS
+ SG_ ICC_LKA_Setting : 17|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_FACM_Setting : 19|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_AEB_Sensitivity : 21|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_BACM_Setting : 23|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_BACM_Sensitivity : 25|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_AEB_JerkSetReq : 27|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_ActvStyGlblSetting : 28|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_TSR_Setting : 29|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ESA_Setting : 30|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ELKASteeringInterventionSet : 31|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_LaneTrajectorySetting : 32|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ACCSwt : 34|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_ACCAutoSpdSts : 35|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ACCSpdStepSize : 36|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ACCFuncTyp : 39|3@0+ (1,0) [0|7] ""  ADAS
+ SG_ ICC_ACCSpdLimOffs : 45|6@0+ (0.5,0) [0|31.5] "%"  ADAS
+ SG_ ICC_ACCSpdLimOffsTyp : 47|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_ACCTerrainSetting : 48|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_0x52A_Undoc_Bit49 : 49|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_ACCTiGapCfm : 51|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_ISASetting : 54|3@0+ (1,0) [0|7] ""  ADAS
+ SG_ ICC_0x52A_Undoc_Bit55 : 55|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_FCTA_Sensitivity : 57|2@0+ (1,0) [0|3] ""  ADAS
+ SG_ ICC_ISAWarnStopReq : 58|1@0+ (1,0) [0|1] ""  ADAS
+ SG_ ICC_TLR_Setting : 61|3@0+ (1,0) [0|7] ""  ADAS
+ SG_ ICC_FCTA_Setting : 63|2@0+ (1,0) [0|3] ""  ADAS
+
 BO_ 1329 ICC_0x531: 8 GW
  SG_ ICC_TotMilgVld_ODO : 0|1@0+ (1,0) [0|1] ""  ADAS,FCM,PKC
  SG_ ICC_TotMilg_ODO : 11|28@0+ (0.01,0) [0|2000000] "km"  ADAS,FCM,PKC
@@ -870,6 +902,33 @@ CM_ SG_ 1300 MFS_RiRollDwn "Right roller (roll-down)";
 CM_ SG_ 1300 MFS_RiRollPress "Right roller (pressed-OK,Confirm(press)";
 CM_ SG_ 1300 MFS_Ri_Fail "Button Failure right buttons";
 CM_ SG_ 1300 MFS_Le_Fail "Button Failure left buttons";
+CM_ SG_ 1322 ICC_0x52A_CheckSum "ICC_0x52A_CheckSum (E2E Data ID: 0xF5)";
+CM_ SG_ 1322 ICC_FACM_DynmcSenstvty "This signal indicates if dynamic sensitivity is enabled by user";
+CM_ SG_ 1322 ICC_UsrProfTiGapSet "Automatic Cruise Control (ACC) Time Gap Setting from ICC user profile";
+CM_ SG_ 1322 ICC_LKA_Setting "RCTA Alert Type";
+CM_ SG_ 1322 ICC_FACM_Setting "FACM setting";
+CM_ SG_ 1322 ICC_AEB_Sensitivity "AEB Time Sensitivity Setting";
+CM_ SG_ 1322 ICC_BACM_Setting "BACM (Rear AEB and RCTB) On and Off";
+CM_ SG_ 1322 ICC_BACM_Sensitivity "BACM (Rear AEB and RCTB) Time Sensitivity Setting";
+CM_ SG_ 1322 ICC_AEB_JerkSetReq "Enabling/disabling the AEB jerk by the driver";
+CM_ SG_ 1322 ICC_ActvStyGlblSetting "Global setting to turn off all active safety features: AEB (forward and backward), LKA, ELKA, ESA";
+CM_ SG_ 1322 ICC_TSR_Setting "To turn On and Off TSR feature settings";
+CM_ SG_ 1322 ICC_ESA_Setting "To turn On and Off ESA feature settings";
+CM_ SG_ 1322 ICC_ELKASteeringInterventionSet "ELKA Steering intervention on/off";
+CM_ SG_ 1322 ICC_LaneTrajectorySetting "Turn the LCA trajectory display on or off";
+CM_ SG_ 1322 ICC_ACCAutoSpdSts "ACC Auto Speed setting";
+CM_ SG_ 1322 ICC_ACCSpdStepSize "Automatic Cruise Control (ACC) Speed setting step size";
+CM_ SG_ 1322 ICC_ACCFuncTyp "Automatic Cruise Control (ACC) function type";
+CM_ SG_ 1322 ICC_ACCSpdLimOffs "Automatic Cruise Control (ACC) speed limit offset value (percentage)";
+CM_ SG_ 1322 ICC_ACCSpdLimOffsTyp "Automatic Cruise Control (ACC) speed limit offset type";
+CM_ SG_ 1322 ICC_ACCTerrainSetting "Automatic Cruise Control (ACC) terrain setting";
+CM_ SG_ 1322 ICC_0x52A_Undoc_Bit49 "Not in the spec; observed set on the car. Defined only so repacking preserves it";
+CM_ SG_ 1322 ICC_ACCTiGapCfm "Automatic Cruise Control (ACC) Time Gap confirmation by driver";
+CM_ SG_ 1322 ICC_ISASetting "ISA settings";
+CM_ SG_ 1322 ICC_0x52A_Undoc_Bit55 "Not in the spec; observed set on the car. Defined only so repacking preserves it";
+CM_ SG_ 1322 ICC_FCTA_Sensitivity "FCTA Sensitivity";
+CM_ SG_ 1322 ICC_TLR_Setting "To turn On and Off TLR feature settings";
+CM_ SG_ 1322 ICC_FCTA_Setting "FCTA Setting";
 CM_ SG_ 1329 ICC_TotMilgVld_ODO "Effective bit of ODO total mileage";
 CM_ SG_ 1329 ICC_TotMilg_ODO "ODO total mileage";
 CM_ SG_ 1329 ICC_DispVehSpd "Display speed";
@@ -3288,6 +3347,31 @@ VAL_ 1300 MFS_RiRollDwn 0 "No_Pressed_Not_pressed" 1 "Focus_1_unit_down" 2 "Focu
 VAL_ 1300 MFS_RiRollPress 0 "No_Pressed" 1 "Pressed" 2 "Reserved" 3 "Reserved" ;
 VAL_ 1300 MFS_Ri_Fail 0 "No_failure" 1 "Connection_failure" 2 "Button_stuck" 3 "Reserved" ;
 VAL_ 1300 MFS_Le_Fail 0 "No_failure" 1 "Controller_failure" 2 "Button_stuck" 3 "Reserved" ;
+VAL_ 1322 ICC_FACM_DynmcSenstvty 0 "On" 1 "Off" ;
+VAL_ 1322 ICC_UsrProfTiGapSet 0 "Invalid" 1 "TimeGap_1_shortest" 2 "TimeGap_2" 3 "TimeGap_3" 4 "TimeGap_4_longest" 5 "Reserved" 6 "Reserved" 7 "Reserved" ;
+VAL_ 1322 ICC_LKA_Setting 0 "Off" 1 "Warning_only" 2 "Warning_and_Steering" 3 "Reserved" ;
+VAL_ 1322 ICC_FACM_Setting 0 "Off" 1 "Warning_only" 2 "Warning_and_Brake" 3 "Reserved" ;
+VAL_ 1322 ICC_AEB_Sensitivity 0 "Normal" 1 "Early" 2 "Late_or_reduced" 3 "Reserved" ;
+VAL_ 1322 ICC_BACM_Setting 0 "Off" 1 "Warning_only" 2 "Warning_and_Brake" 3 "Reserved" ;
+VAL_ 1322 ICC_BACM_Sensitivity 0 "Normal" 1 "Early" 2 "Late_or_reduced" 3 "Reserved" ;
+VAL_ 1322 ICC_AEB_JerkSetReq 0 "Off" 1 "On(Default)" 2 "Reserved" 3 "Reserved" ;
+VAL_ 1322 ICC_ActvStyGlblSetting 0 "On" 1 "Off" ;
+VAL_ 1322 ICC_TSR_Setting 0 "Off" 1 "On" ;
+VAL_ 1322 ICC_ESA_Setting 0 "Off" 1 "On" ;
+VAL_ 1322 ICC_ELKASteeringInterventionSet 0 "Off" 1 "On" ;
+VAL_ 1322 ICC_LaneTrajectorySetting 0 "Off" 1 "On" ;
+VAL_ 1322 ICC_ACCSwt 0 "Invalid" 1 "On" 2 "Off" 3 "reserved" ;
+VAL_ 1322 ICC_ACCAutoSpdSts 0 "Off" 1 "On" ;
+VAL_ 1322 ICC_ACCSpdStepSize 0 "Step_1_unit" 1 "Step_5_unit" ;
+VAL_ 1322 ICC_ACCFuncTyp 0 "Default" 1 "Basic" 2 "Advanced" 3 "ISA" 4 "Fault" ;
+VAL_ 1322 ICC_ACCSpdLimOffsTyp 0 "Exceeding_limit_not_allowed" 1 "Percentage" 2 "Speed_value" 3 "Reserved" ;
+VAL_ 1322 ICC_ACCTerrainSetting 0 "Not_enabled" 1 "Enabled" ;
+VAL_ 1322 ICC_ACCTiGapCfm 0 "Default/No_Selection" 1 "Driver_Accepted" 2 "Driver_Rejected" 3 "Reserved" ;
+VAL_ 1322 ICC_ISASetting 0 "Off" 1 "Display_Warning_Only" 2 "Display_and_chime_warning" 3 "Display_and_Control" 4 "Display_and_chime_Warning_+_Control" ;
+VAL_ 1322 ICC_FCTA_Sensitivity 0 "Normal" 1 "Early" 2 "Late_or_reduced" 3 "Reserved" ;
+VAL_ 1322 ICC_ISAWarnStopReq 0 "No_Driver_ISA_warning_stop_request_(User_not_acknowledged)" 1 "Driver_ISA_warning_stop_request_(User_acknowledged)" ;
+VAL_ 1322 ICC_TLR_Setting 0 "Off" 1 "On" 2 "chime_warning" 3 "chime_red_light" 4 "chime_green_light" ;
+VAL_ 1322 ICC_FCTA_Setting 0 "Off" 1 "Warning_only" 2 "Warning_and_Brake" 3 "Reserved" ;
 VAL_ 1329 ICC_TotMilgVld_ODO 0 "Value_OK" 1 "Value_Unreliable" ;
 VAL_ 1329 ICC_DispVehSpdUnit 0 "KMH" 1 "MPH" ;
 VAL_ 1329 ICC_ADASSigFlt 0 "No_Failure" 1 "Reversible_Failure" 2 "Irrversible_Failure" 3 "Reserved" ;

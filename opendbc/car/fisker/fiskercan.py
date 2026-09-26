@@ -18,7 +18,7 @@ opendbc.car.fisker.secoc.stamp_secoc.
 """
 
 from opendbc.can import CANPacker
-from opendbc.car.fisker.values import CANBUS
+from opendbc.car.fisker.values import CANBUS, ICC_SETTINGS_OVERRIDES
 
 # Per-address (data_id, length_bits) pair used by the plain-CRC checksum below.
 E2E_PARAMS: dict[int, tuple[int, int]] = {
@@ -33,6 +33,7 @@ E2E_PARAMS: dict[int, tuple[int, int]] = {
   0x317: (205, 64),   # ADAS chime / takeover
   0x318: (121, 64),   # ESP vehicle speed
   0x31A: (55, 64),    # ADAS AEB / telltale
+  0x52A: (0xF5, 64),  # ICC feature settings (verified against logged ICC frames)
 }
 
 
@@ -195,6 +196,18 @@ class FiskerCAN:
       "ADAS_118_CheckSum": 0,
     }
     addr, data, bus = self.packer.make_can_msg("ADAS_0x118", CANBUS.pt, values)
+    chk = fisker_plain_checksum(addr, data)
+    return addr, bytes([chk]) + data[1:], bus
+
+  # ---- ADAS module side (Bus.cam) --------------------------------------------
+
+  def create_icc_settings(self, icc_values: dict[str, float]):
+    """ICC_0x52A — the ICC's feature-settings frame, re-sent to the ADAS module (bus 2) with
+    ICC_SETTINGS_OVERRIDES applied. `icc_values` is one decoded ICC frame from bus 0; every
+    signal not overridden — including ICC_0x52A_AliveCounter — is copied from it, so our stream
+    carries the ICC's own counter sequence (one output per ICC frame). E2E checksum on byte0."""
+    values = {**icc_values, **ICC_SETTINGS_OVERRIDES, "ICC_0x52A_CheckSum": 0}
+    addr, data, bus = self.packer.make_can_msg("ICC_0x52A", CANBUS.cam, values)
     chk = fisker_plain_checksum(addr, data)
     return addr, bytes([chk]) + data[1:], bus
 
