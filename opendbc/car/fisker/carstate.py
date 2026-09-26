@@ -196,7 +196,8 @@ class CarState(CarStateBase):
     ret.buttonEvents = button_events
 
     # ---- Faults ----
-    ret.accFaulted = cc_state in (9, 10) or bool(cp_pt.vl["ESP_0x114"]["ESP_FltIndcn_AEB"])
+    ret.accFaulted = False
+    # ret.accFaulted = cc_state in (9, 10) or bool(cp_pt.vl["ESP_0x114"]["ESP_FltIndcn_AEB"])
 
     # ---- OEM ADAS lateral counters (bus 2, for takeover alignment) --------
     # Snapshot the OEM ADAS's own AliveCounter and SSecOC_Fresh_Byte0 from bus 2. The
