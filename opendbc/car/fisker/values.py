@@ -140,6 +140,7 @@ ICC_0x35B_OVERRIDES: dict[str, int] = {
   #                                 #   3=ON_with_visual_and_audio_and_Steering_Wheel_Vibration
   # "ICC_LKA_SettingWrnTyp": 1,     # 0=Audio_Visual_and_Haptic 1=Visual_and_Audio
   "ICC_SteerWhlVibrSet": 1,       # 0=Off 1=On
+  "ICC_APAActivation": 1,          # 0=Off 1=On
   "ICC_APA_Setting": 2,           # 0=Coded_off_(not_equipped) 1=Off_(by_user) 2=Enabled
   "ICC_APAParkInDirSetting": 1,   # 0=Nose-in 1=Back-in
   "ICC_APAParkOutDirSetting": 1,  # 0=Right 1=Left
