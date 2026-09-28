@@ -177,13 +177,16 @@ class CarState(CarStateBase):
     # Enum: 0=ACC_Off 1=Initialization 2=Standby 3=Active 4=Override 5=Standstill_active
     # 6=Standstill_wait 7=Deactivation_brake 8=Deactivation_other 9=Failure_reversible
     # 10=Failure_irreversible 11=Standstill_GoNotification. Must match fisker_rx_hook.
-    # Set speed ADAS_AccTrgSpdDisp (0x31C) is in the driver-selected unit
-    # (ADAS_DispSpdUnit_ACC VAL_: 0=KMH,1=MPH); 255=no_display. Populate speedCluster too
-    # so the UI "MAX" box renders.
+    # Set speed ADAS_AccTrgSpdDisp (0x31C) is nominally in the unit given by
+    # ADAS_DispSpdUnit_ACC (VAL_: 0=KMH,1=MPH), but on real cars this bit doesn't track the
+    # driver's cluster setting (it's hardcoded to 0 on the write side too, see
+    # fiskercan.create_acc_hud) — trusting it on a mph car silently converts an already-mph
+    # value with the km/h factor and shows ~1.6x low (65 mph reads as ~40). ICC_DispVehSpdUnit
+    # (read above for vEgoCluster) is the reliable source for the driver's unit, so reuse it
+    # here too. 255=no_display. Populate speedCluster too so the UI "MAX" box renders.
     acc_state = int(cp_cam.vl["ADAS_0x313"]["ADAS_Sts_ACC_ICC"])
-    acc_hud = cp_cam.vl["ADAS_0x31C"]
-    acc_disp = acc_hud["ADAS_AccTrgSpdDisp"]
-    acc_speed = 0.0 if acc_disp >= 255 else acc_disp * (CV.MPH_TO_MS if acc_hud["ADAS_DispSpdUnit_ACC"] == 1 else CV.KPH_TO_MS)
+    acc_disp = cp_cam.vl["ADAS_0x31C"]["ADAS_AccTrgSpdDisp"]
+    acc_speed = 0.0 if acc_disp >= 255 else acc_disp * icc_to_ms
 
     ret.cruiseState.enabled = acc_state in (3, 4, 5, 6, 11)
     ret.cruiseState.available = acc_state not in (0, 1, 9, 10)

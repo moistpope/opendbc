@@ -115,11 +115,11 @@ SECOC_SYNC_MSG = (0x20, "GW_Syn_All")    # 50 ms, full 40-bit freshness on wire
 ICC_SETTINGS_OVERRIDES = {
   "ICC_LaneTrajectorySetting": 1,        # On
   "ICC_ACCSwt": 1,                       # On
-  "ICC_ACCAutoSpdSts": 0,                # Off
+  "ICC_ACCAutoSpdSts": 1,                # Off
   "ICC_ACCSpdStepSize": 1,               # Step_5_unit
   "ICC_ACCFuncTyp": 2,                   # Advanced
-  "ICC_ACCTiGapCfm": 0,                  # Default/No_Selection
-  "ICC_ActvStyGlblSetting": 1,           # 0=Onff 1=Off
+  # "ICC_ACCTiGapCfm": 0,                  # Default/No_Selection
+  # "ICC_ActvStyGlblSetting": 1,           # 0=Onff 1=Off
 }
 
 
@@ -130,7 +130,7 @@ ICC_SETTINGS_OVERRIDES = {
 # undocumented bits, passes through unchanged. Raw values; names from the DBC VAL_ tables.
 ICC_0x35B_OVERRIDES: dict[str, int] = {
   "ICC_EnbLnChgAsst": 1,          # 0=Auto_steer_not_enabled 1=Auto_steer_enabled
-  "ICC_BSDSetting": 3,            # 0=OFF 1=ON_with_Visual 2=ON_with_visual_and_audio
+  "ICC_BSDSetting": 1,            # 0=OFF 1=ON_with_Visual 2=ON_with_visual_and_audio
   #                                 #   3=ON_with_visual_and_audio_and_Steering_Wheel_Vibration
   # "ICC_BSD_Sensitivity": 0,       # 0=Normal 1=Early 2=Late_or_reduced
   # "ICC_DOW_Setting": 2,           # 0=OFF 1=ON_with_Visual 2=ON_with_visual_and_audio

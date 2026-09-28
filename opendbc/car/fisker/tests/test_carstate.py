@@ -37,7 +37,10 @@ def run_carstate(acc_state: int, set_speed: int, mph: bool):
 
   frames = [
     packer.make_can_msg("ADAS_0x313", CANBUS.cam, {"ADAS_Sts_ACC_ICC": acc_state}),
-    packer.make_can_msg("ADAS_0x31C", CANBUS.cam, {"ADAS_AccTrgSpdDisp": set_speed, "ADAS_DispSpdUnit_ACC": int(mph)}),
+    packer.make_can_msg("ADAS_0x31C", CANBUS.cam, {"ADAS_AccTrgSpdDisp": set_speed}),
+    # ACC set speed unit follows the cluster's own unit (ICC_DispVehSpdUnit), not the
+    # unreliable ADAS_DispSpdUnit_ACC bit — see carstate.py.
+    packer.make_can_msg("ICC_0x531", CANBUS.pt, {"ICC_DispVehSpdUnit": int(mph)}),
   ]
   for cp in parsers.values():
     cp.update([(0, frames)])
