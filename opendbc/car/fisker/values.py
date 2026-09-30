@@ -69,6 +69,11 @@ BUTTON_MAP = {
   # cancel / resume / gapAdjustCruise: TBD from bench testing
 }
 
+# DBC VAL_ for these signals is 0=No_Pressed 1=Pressed 2=Long_Press 3=Reserved — a single
+# signal carries both tap and hold as distinct enum values (not two signals). Buttons listed
+# here only fire their ButtonEvent on the Long_Press (2) state; a short Pressed (1) is ignored.
+BUTTON_LONG_PRESS_ONLY = {"MFS_RiBtnSouth"}
+
 
 class CarControllerParams:
   # Steering angle command — ADAS_LatCtrl_SteerAnReq in 0x1D0

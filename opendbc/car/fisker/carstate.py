@@ -4,6 +4,7 @@ from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.fisker.values import (
+  BUTTON_LONG_PRESS_ONLY,
   BUTTON_MAP,
   CANBUS,
   DBC,
@@ -198,7 +199,10 @@ class CarState(CarStateBase):
     mfs = cp_pt.vl["MFS_0x514"]
     button_events = []
     for sig, btype in BUTTON_SIGNAL_TO_TYPE.items():
-      cur = int(mfs[sig])
+      raw = int(mfs[sig])
+      # long-press-only buttons (e.g. MADS) ignore the short Pressed (1) state and
+      # only register on Long_Press (2), so a quick tap doesn't toggle them
+      cur = int(raw == 2) if sig in BUTTON_LONG_PRESS_ONLY else int(raw != 0)
       prev = self._prev_button_state[sig]
       # treat any non-zero state as "pressed" for the first frame of the press
       if cur != 0 and prev == 0:
