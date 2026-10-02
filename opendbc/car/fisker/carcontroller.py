@@ -42,13 +42,6 @@ class CarController(CarControllerBase):
     self.secoc_key_verified = False
     self.secoc_warn_logged = False
 
-    # Once openpilot has been long-active at least once, keep the ADAS heartbeat going for
-    # the rest of the drive. If we go silent between engagements the ESP loses our 0x118 AEB
-    # state (falls into "AEB unavailable" fault) and the VCU's E2E AliveCounter validator
-    # rejects our first re-engage frames as out-of-sequence — surfacing as "ADAS error,
-    # emergency brake unavailable" on the cluster and a cruise fault in openpilot.
-    self.long_ever_active = False
-
     # "We ARE OEM" AliveCounter substitution: every OEM 0x1D0/0x1C0 tick that panda
     # blocks, we transmit a frame with the SAME AliveCounter that OEM would have sent —
     # our stream literally continues OEM's numbering during the blocked window. At
@@ -98,17 +91,9 @@ class CarController(CarControllerBase):
       self.secoc_prev_reset = reset
     self.secoc_window_ctr += 1
 
-    # E2E AliveCounter (byte1 low nibble): 0..14 counter, +1 per frame, never 15 (15 is
-    # the E2E invalid sentinel — DBC range [0|14]). For LATERAL (0x1D0/0x1C0) we track
-    # per-PDU below so we can align to OEM's most recent bus-2 value at every engage
-    # transition — that way our first re-engage frame is (OEM_last + 1), exactly what EPS
-    # expects. If we free-ran with self.frame%15 through disengaged periods, EPS's
-    # last-accepted-from-OEM would diverge from our next-transmit and the first re-engage
-    # frame would be rejected (surfaces as an LKA fault / "ADAS error" on cluster and
-    # MADS auto-off). The longitudinal path (0x121/0x117/0x118, alpha_long only) still
-    # uses the free-running counter for now — same alignment could help there too but is
-    # scoped separately.
-    alive = self.frame % 15
+    # E2E AliveCounter (byte1 low nibble): 0..14, +1 per frame, never 15 (the E2E invalid sentinel).
+    # It is tracked per tick (alive_1d0/alive_1c0 below), seeded from the stock module's counter at
+    # every engage transition so our first frame is what the receivers expect next.
 
     # ---- Lateral (steering angle 0x1D0 + activation 0x1C0 @ 100 Hz) ----
     # Send for the WHOLE engaged window so the cluster/EPS never see the frame disappear.
@@ -196,55 +181,29 @@ class CarController(CarControllerBase):
       can_sends.append(self._stamp(steer_msg, STEER_CAN_ID, trip, reset, self.secoc_window_ctr))
       can_sends.append(self.fcan.create_lat_control(lat_active, self.alive_1c0, driver_override=False))
 
-    # ---- Longitudinal (accel 0x121 + status 0x117/0x118 @ 100 Hz) ----
-    # Same architecture as lateral (see comment above): send the whole triple across the
-    # WHOLE engaged window so the VCU/ESP never see the ADAS heartbeat vanish. Content
-    # modulates on state:
-    #   engaged + long_active + not gas_override: Sts=Active(3) + Typ=ACC(1), AccelVld=1,
-    #                                             AccelReq = openpilot's commanded accel
-    #   engaged + gas_override:                    Sts=Active(3) + Typ=ACC(1), AccelVld=1,
-    #                                             AccelReq = 0 (yield to driver pedal —
-    #                                             the VCU arbitrates pedal vs request)
-    #   engaged + !long_active:                    Sts=Active(3) + Typ=ACC(1) but
-    #                                             AccelVld=0 (idle heartbeat)
-    #   !engaged:                                   frames not sent (nothing on bus 2 to
-    #                                             forward on this trim, but if the OEM
-    #                                             ADAS SW is ever restored it will get
-    #                                             through and Sts=Off/Typ=Not_Active)
-    #
-    # NOTE: the CC->ACC transition is a value change (Sts 0->3) INSIDE this continuous
-    # stream — it is not a one-shot event message. The VCU is designed to hand accel
-    # control to the ADAS the moment it sees Sts=Active + Typ=ACC on 0x117.
-    if self.CP.openpilotLongitudinalControl:
+    # ---- Longitudinal (accel 0x121 + status 0x117 + ESP handshake 0x118 @ 100 Hz) ----
+    # openpilot's own longitudinal control (planner/e2e model -> accel), not the stock ACC's.
+    # Same "we ARE OEM" takeover as lateral: while cruise is engaged and openpilot drives
+    # longitudinal, panda blocks the stock module's 0x121/0x117/0x118 on bus 2 and we send ours in
+    # their place on every tick, so the VCU/ESP see exactly one stream. The stock ACC state (0x313)
+    # still gates engagement (panda's controls_allowed follows it), and its frames take over again
+    # the moment we stop. All five ADAS messages share one AliveCounter on the stock module, so
+    # these use the same lockstep value as 0x1D0/0x1C0 (seeded from the stock counter at engage).
+    # We send only inside the window panda blocks (cruise engaged, not MADS-only); outside it the
+    # stock frames flow and any frame of ours would be a duplicate with its own counter.
+    #   long_active, no gas:  AccelReq = openpilot's accel
+    #   engaged, otherwise:   AccelReq = 0 (Vld stays Valid, as on the stock frame)
+    if self.CP.openpilotLongitudinalControl and engaged and CS.out.cruiseState.enabled:
       long_active = CC.longActive and secoc_ok
       gas_override = CS.out.gasPressed         # driver commanding accel via pedal
-      accel_active = long_active and not gas_override
-      accel = 0.0 if not accel_active else float(np.clip(actuators.accel,
-                                                          self.params.ACCEL_MIN,
-                                                          self.params.ACCEL_MAX))
-      if long_active:
-        self.long_ever_active = True
+      accel = 0.0
+      if long_active and not gas_override:
+        accel = float(np.clip(actuators.accel, self.params.ACCEL_MIN, self.params.ACCEL_MAX))
 
-      # Continue sending the ADAS heartbeat once we've ever been active, so the AliveCounter
-      # never has a gap and the ESP never sees 0x118 (AEB state) disappear. Idle values
-      # (long_active=False -> Sts=Off, AccelVld=Init) mimic what a real ADAS would publish
-      # when powered but not commanding.
-      # Braking authorization: VCU-side ACC deceleration requires ADAS_LgtCtrl_Typ=TJA/ICA
-      # (= value 2, ACC_Stop_and_Go). That's set inside create_long_status when long_active
-      # is True — no per-frame gating needed here. ISA_CutOffReq is a separate Speed-Limit
-      # mechanism that requires driver-activated Speed Limiter mode; not the path openpilot
-      # needs.
-
-      if engaged or self.long_ever_active:
-        # 0x121 accel command (SecOC)
-        accel_msg = self.fcan.create_accel_command(accel, accel_active, alive)
-        can_sends.append(self._stamp(accel_msg, ACCEL_CAN_ID, trip, reset, self.secoc_window_ctr))
-
-        # 0x117 status + 0x118 ESP handshake (plain E2E, no SecOC)
-        can_sends.append(self.fcan.create_long_status(long_active, gas_override,
-                                                       gear_req=0, counter=alive))
-        can_sends.append(self.fcan.create_long_esp_handshake(long_active, gas_override,
-                                                              counter=alive))
+      accel_msg = self.fcan.create_accel_command(accel, self.alive_1d0)
+      can_sends.append(self._stamp(accel_msg, ACCEL_CAN_ID, trip, reset, self.secoc_window_ctr))
+      can_sends.append(self.fcan.create_long_status(gas_override, CS.oem_isa_spd_lmt, self.alive_1d0))
+      can_sends.append(self.fcan.create_long_esp_handshake(self.alive_1d0))
 
     # ---- ICC feature settings (0x52A, ICC on bus 0 -> ADAS module on bus 2) ----
     # Always on, independent of engagement: panda blocks the ICC's own 0x52A from reaching the

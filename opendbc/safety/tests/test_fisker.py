@@ -196,5 +196,63 @@ class TestFiskerCruiseState(unittest.TestCase):
         self.assertFalse(self.safety.get_controls_allowed())
 
 
+class TestFiskerLongitudinal(unittest.TestCase):
+  """With the long flag, openpilot replaces the stock ADAS 0x121/0x117/0x118 while cruise is
+  engaged: panda must block all three from bus 2 -> 0 then, and forward them otherwise."""
+
+  LONG_ADDRS = (0x121, 0x117, 0x118)
+
+  def setUp(self):
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.fisker, 1)   # FiskerSafetyFlags.LONG_CONTROL
+    self.safety.init_tests()
+
+  def _acc_state(self, state):
+    dat = bytearray(8)
+    dat[4] = state & 0x0F
+    self.safety.safety_rx_hook(common.make_msg(2, 0x313, dat=bytes(dat)))
+
+  def test_stock_frames_forwarded_when_not_engaged(self):
+    self._acc_state(2)
+    for addr in self.LONG_ADDRS:
+      self.assertEqual(self.safety.safety_fwd_hook(2, addr), 0, hex(addr))
+
+  def test_stock_frames_blocked_when_engaged(self):
+    self._acc_state(2)
+    self._acc_state(3)
+    for addr in self.LONG_ADDRS:
+      self.assertEqual(self.safety.safety_fwd_hook(2, addr), -1, hex(addr))
+    self.assertEqual(self.safety.safety_fwd_hook(2, 0x313), 0)   # the ACC state itself still reaches the car
+    self._acc_state(2)
+    for addr in self.LONG_ADDRS:
+      self.assertEqual(self.safety.safety_fwd_hook(2, addr), 0, hex(addr))
+
+  def test_not_blocked_without_long_flag(self):
+    self.safety.set_safety_hooks(CarParams.SafetyModel.fisker, 0)
+    self.safety.init_tests()
+    self._acc_state(2)
+    self._acc_state(3)
+    for addr in self.LONG_ADDRS:
+      self.assertEqual(self.safety.safety_fwd_hook(2, addr), 0, hex(addr))
+
+  def test_0x118_requests_refused(self):
+    base = bytes.fromhex("00f0484844d080d2")   # stock frame
+    self.assertTrue(self.safety.safety_tx_hook(common.make_msg(0, 0x118, dat=base)))
+    for idx, val in ((5, 0xD1), (3, 0x49), (4, 0x45), (4, 0x54)):   # AEB type, HBA, jerk, brake prefill
+      dat = bytearray(base)
+      dat[idx] = val
+      with self.subTest(byte=idx, val=hex(val)):
+        self.assertFalse(self.safety.safety_tx_hook(common.make_msg(0, 0x118, dat=bytes(dat))))
+
+  def test_0x117_unwanted_requests_refused(self):
+    base = bytes.fromhex("00004b4050a1ff28")   # stock ACC-active frame
+    self.assertTrue(self.safety.safety_tx_hook(common.make_msg(0, 0x117, dat=base)))
+    for idx, val in ((3, 0x50), (3, 0x60), (4, 0x54), (5, 0xB1), (5, 0xE1)):   # standstill, gear, EPB, ISA cut-off
+      dat = bytearray(base)
+      dat[idx] = val
+      with self.subTest(byte=idx, val=hex(val)):
+        self.assertFalse(self.safety.safety_tx_hook(common.make_msg(0, 0x117, dat=bytes(dat))))
+
+
 if __name__ == "__main__":
   unittest.main()

@@ -11,8 +11,8 @@
 //   TX  0x1D0  ADAS_LatCtrl_SteerAnReq    steering angle (SecOC)
 //   TX  0x1C0  ADAS_LatCtrl activation    plain E2E, lateral activation/status
 //   TX  0x121  ADAS_LgtCtrl_AccelReq      accel (SecOC, longitudinal only)
-//   TX  0x117  ADAS long control status   plain E2E, Sts/Typ (CC -> ACC transition)
-//   TX  0x118  ADAS long/ESP handshake    plain E2E, ESP-side mirror + jerk/prefill/AEB
+//   TX  0x117  ADAS long control status   plain E2E; longitudinal only, replaces the stock frame
+//   TX  0x118  ADAS long/ESP handshake    plain E2E; longitudinal only, no ESP/AEB requests allowed
 //   TX  0x52A  ICC feature settings       bus 2 (to the ADAS module), plain E2E — see below
 //   TX  0x35B  ICC SVS/BSD/APA settings   bus 2 (to the ADAS module), no E2E — optional relay
 //   RX  0x115  wheel speeds -> vehicle_moving
@@ -196,6 +196,29 @@ static bool fisker_tx_hook(const CANPacket_t *msg) {
     }
   }
 
+  // Long status (0x117): openpilot never requests an EPB apply, a standstill hold, a gear change
+  // or a motor cut-off. HAP_EmgyStandstillReq @ 28 / ParkStandstillReq @ 29 -> data[3] bits 4, 5;
+  // ParkGearReq @ 35 (4 bits) -> data[4] low nibble; HAP_EmgyEPBReq @ 44 / ISA_CutOffReq @ 46 ->
+  // data[5] bits 4, 6.
+  if (msg->addr == 0x117U) {
+    bool unwanted = ((msg->data[3] & 0x30U) != 0U) || ((msg->data[4] & 0x0FU) != 0U) || ((msg->data[5] & 0x50U) != 0U);
+    if (unwanted) {
+      tx = false;
+    }
+  }
+
+  // ESP handshake (0x118). Longitudinal control only needs the stock idle values here; refuse any
+  // frame asserting an AEB request (ADAS_AEB_ActvTyp, 4 bits @ 43 -> data[5] low nibble) or an
+  // ESP-side brake request (HBAReq data[3] bits 2..0, JerkReq data[4] bits 1..0,
+  // BrkPrefillReq data[4] bits 5..4), so a bug can't command hydraulic braking.
+  if (msg->addr == 0x118U) {
+    bool esp_request = ((msg->data[5] & 0x0FU) != 0U) || ((msg->data[3] & 0x07U) != 0U) ||
+                       ((msg->data[4] & 0x03U) != 0U) || (((msg->data[4] >> 4) & 0x03U) != 0U);
+    if (esp_request) {
+      tx = false;
+    }
+  }
+
   // ICC feature settings (0x52A, bus 2): remember when openpilot last sent one so the fwd hook
   // knows whether to keep blocking the ICC's original.
   if ((msg->addr == 0x52AU) && (msg->bus == 2U)) {
@@ -288,9 +311,12 @@ static bool fisker_fwd_hook(int bus_num, int addr) {
     if (((addr == 0x1D0) || (addr == 0x1C0)) && (controls_allowed || controls_allowed_lateral)) {
       block_msg = true;
     }
-    // Longitudinal (0x121) is unaffected by MADS — MADS is lateral-only. Only block the
-    // OEM's accel when cruise is engaged and openpilot is driving longitudinal.
-    if (fisker_longitudinal && (addr == 0x121) && controls_allowed) {
+    // Longitudinal (0x121 accel, 0x117 status, 0x118 ESP handshake) is unaffected by MADS, which
+    // is lateral-only. While cruise is engaged and openpilot drives longitudinal it replaces all
+    // three, so the stock module's must be blocked: the receivers' E2E counters tolerate one
+    // sender, not two interleaved. (Blocking only 0x121 left the stock 0x117/0x118 flowing next to
+    // ours.) Stock frames take over again as soon as controls_allowed drops.
+    if (fisker_longitudinal && controls_allowed && ((addr == 0x121) || (addr == 0x117) || (addr == 0x118))) {
       block_msg = true;
     }
   }

@@ -74,6 +74,8 @@ class CarState(CarStateBase):
     self.oem_1d0_alive = 0
     self.oem_1c0_alive = 0
     self.oem_1d0_secoc_wire_ctr = 0    # (byte >> 2) & 0x3F — lower 6 bits of msg_counter
+    # ISA speed limit the stock ADAS module reports in 0x117; relayed in ours (carcontroller).
+    self.oem_isa_spd_lmt = 0
 
     # Every ICC_0x52A frame received on bus 0 since the last update, decoded. Carcontroller
     # re-sends each one (with overrides) to the ADAS module on bus 2 — see create_icc_settings.
@@ -229,6 +231,7 @@ class CarState(CarStateBase):
     self.oem_1d0_alive = int(oem_1d0["ADAS_1D0_AliveCounter"])
     self.oem_1c0_alive = int(oem_1c0["ADAS_1C0_AliveCounter"])
     self.oem_1d0_secoc_wire_ctr = (int(oem_1d0["ADAS_1D0_SSecOC_Fresh_Byte0"]) >> 2) & 0x3F
+    self.oem_isa_spd_lmt = int(cp_cam.vl["ADAS_0x117"]["ADAS_ISA_SpdLmt_VCU"])
 
     # ---- ICC frames relayed to the ADAS module by carcontroller ----
     # One re-sent frame per ICC frame, in order (0x52A keeps the ICC's counter this way).
@@ -298,6 +301,7 @@ class CarState(CarStateBase):
       # the very first re-engage frame is what surfaces as "ADAS error" on the cluster.
       ("ADAS_0x1C0", 100),  # ADAS_1C0_AliveCounter
       ("ADAS_0x1D0", 100),  # ADAS_1D0_AliveCounter + ADAS_1D0_SSecOC_Fresh_Byte0
+      ("ADAS_0x117", 100),  # ADAS_ISA_SpdLmt_VCU, relayed in our 0x117
     ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_msgs, CANBUS.pt),

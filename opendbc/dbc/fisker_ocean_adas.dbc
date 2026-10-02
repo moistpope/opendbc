@@ -128,6 +128,9 @@ BO_ 279 ADAS_0x117: 8 ADAS
  SG_ ADAS_HAP_EmgyEPBReq : 44|1@0+ (1,0) [0|1] ""  GW
  SG_ ADAS_ISA_CutOffReq : 46|1@0+ (1,0) [0|1] ""  GW
  SG_ ADAS_ISA_SpdLmt_VCU : 63|8@0+ (1,0) [0|255] "kph"  GW
+ SG_ ADAS_117_Rsv_B5_5 : 45|1@0+ (1,0) [0|1] ""  GW
+ SG_ ADAS_117_Rsv_B5_7 : 47|1@0+ (1,0) [0|1] ""  GW
+ SG_ ADAS_117_Rsv_B6 : 55|8@0+ (1,0) [0|255] ""  GW
 
 BO_ 280 ADAS_0x118: 8 ADAS
  SG_ ADAS_118_CheckSum : 7|8@0+ (1,0) [0|255] ""  GW
@@ -147,6 +150,8 @@ BO_ 280 ADAS_0x118: 8 ADAS
  SG_ ADAS_AEB_ActvTyp : 43|4@0+ (1,0) [0|15] ""  GW
  SG_ ADAS_AEB_DecelVld : 45|2@0+ (1,0) [0|3] ""  GW
  SG_ ADAS_AEB_DecelReq : 55|16@0+ (0.0004882,-16) [-16|15.994187] "m/s2"  GW
+ SG_ ADAS_118_Rsv_B1 : 15|4@0+ (1,0) [0|15] ""  GW
+ SG_ ADAS_118_Rsv_B5 : 47|2@0+ (1,0) [0|3] ""  GW
 
 BO_ 288 ESP_0x120: 8 GW
  SG_ ESP_120_CheckSum : 7|8@0+ (1,0) [0|255] ""  ADAS,FCM
@@ -162,6 +167,7 @@ BO_ 289 ADAS_0x121: 8 ADAS
  SG_ ADAS_121_CheckSum : 7|8@0+ (1,0) [0|255] ""  GW
  SG_ ADAS_121_AliveCounter : 11|4@0+ (1,0) [0|14] ""  GW
  SG_ ADAS_LgtCtrl_AccelVld : 13|2@0+ (1,0) [0|3] ""  GW
+ SG_ ADAS_121_Rsv_B1 : 15|2@0+ (1,0) [0|3] ""  GW
  SG_ ADAS_LgtCtrl_AccelReq : 23|16@0+ (0.0004882,-16) [-16|15.994187] "m/s2"  GW
  SG_ ADAS_121_SSecOC_Fresh_Byte0 : 39|8@0+ (1,0) [0|255] ""  GW
  SG_ ADAS_121_SSecOC_MAC_Byte0 : 47|8@0+ (1,0) [0|255] ""  GW
@@ -3500,4 +3506,12 @@ VAL_ 1329 ICC_DispVehSpdUnit 0 "KMH" 1 "MPH" ;
 VAL_ 1329 ICC_ADASSigFlt 0 "No_Failure" 1 "Reversible_Failure" 2 "Irrversible_Failure" 3 "Reserved" ;
 VAL_ 1329 ICC_DispFlt 0 "No_Error_No_error" 1 "Error_error" ;
 VAL_ 1329 ICC_WorkshopMode 0 "Init" 1 "Active" 2 "Inactive" 3 "Invalid" ;
+
+CM_ SG_ 279 ADAS_117_Rsv_B5_5 "Not in the FM29 matrix. The stock ADAS sets this bit (and Rsv_B5_7 and all of Rsv_B6) to 1 on every frame in the car logs.";
+CM_ SG_ 279 ADAS_117_Rsv_B6 "Not in the FM29 matrix: 0xFF on every stock frame in the car logs (all-ones fill).";
+CM_ SG_ 280 ADAS_118_Rsv_B1 "Not in the FM29 matrix: 0xF on every stock frame in the car logs (all-ones fill).";
+CM_ SG_ 280 ADAS_118_Rsv_B5 "Not in the FM29 matrix: 3 on every stock frame in the car logs (all-ones fill).";
+CM_ SG_ 280 ADAS_AEB_DecelReq "The stock ADAS idles this at raw 0x80D2 (+0.1 m/s2), not at raw 0 (-16 m/s2). Only meaningful while ADAS_AEB_ActvTyp is not Not_Active.";
+CM_ SG_ 289 ADAS_121_Rsv_B1 "Not in the FM29 matrix: 3 on every stock frame in the car logs (all-ones fill).";
+CM_ SG_ 289 ADAS_LgtCtrl_AccelVld "The stock ADAS sends Valid (1) on every frame, including with ACC in standby and zero accel.";
 

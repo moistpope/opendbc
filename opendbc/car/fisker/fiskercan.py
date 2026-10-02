@@ -37,6 +37,10 @@ E2E_PARAMS: dict[int, tuple[int, int]] = {
 }
 
 
+# ADAS_0x118 AEB_DecelReq the stock module idles at: raw 0x80D2.
+AEB_DECEL_IDLE = 0x80D2 * 0.0004882 - 16
+
+
 def fisker_plain_checksum(addr: int, data: bytes) -> int:
   """
   Fisker Ocean plain 8-bit CheckSum.
@@ -108,15 +112,20 @@ class FiskerCAN:
     chk = fisker_plain_checksum(addr, data)
     return addr, bytes([chk]) + data[1:], bus
 
-  def create_accel_command(self, accel: float, accel_active: bool, counter: int):
-    """ADAS_0x121 — longitudinal accel request, 10 ms cycle. SecOC-protected.
-    `accel_active` gates the wire-level Vld — 1(Valid) while we're actually commanding,
-    0(Initializing) otherwise so the VCU ignores the request while we're disengaged/idle.
-    Callers should pass accel=0.0 during driver gas override (we still send Vld=1 to keep
-    a valid heartbeat, but request zero acceleration so the VCU can arbitrate the pedal)."""
+  # The three longitudinal messages below are built to match the stock ADAS module's frames
+  # byte for byte while its ACC is Active (checked against recorded drives, see
+  # tests/test_long_frames.py). openpilot replaces all three while it controls longitudinal and
+  # panda blocks the stock ones, so the VCU/ESP see one source. The all-ones fill in bits the
+  # DBC doesn't define is what the stock module sends; the receivers' E2E CRC covers it.
+
+  def create_accel_command(self, accel: float, counter: int):
+    """ADAS_0x121 — longitudinal accel request, 10 ms cycle. SecOC-protected (tail stamped by
+    the caller). AccelVld is Valid on every stock frame, including with zero accel in standby, so
+    "not commanding" is accel=0, never Vld=0."""
     values = {
       "ADAS_LgtCtrl_AccelReq": accel,
-      "ADAS_LgtCtrl_AccelVld": 1 if accel_active else 0,
+      "ADAS_LgtCtrl_AccelVld": 1,
+      "ADAS_121_Rsv_B1": 3,
       "ADAS_121_AliveCounter": counter & 0xF,
       "ADAS_121_CheckSum": 0,   # filled in below
     }
@@ -125,43 +134,32 @@ class FiskerCAN:
     data = bytes([chk]) + data[1:]
     return addr, data, bus
 
-  def create_long_status(self, long_active: bool, drvr_override: bool,
-                         gear_req: int, counter: int):
-    """ADAS_0x117 — long-control status + parking gear request, 10 ms cycle (plain E2E).
-
-    The VCU only applies a NEGATIVE ADAS_LgtCtrl_AccelReq (on 0x121) when ALL of these
-    conditions hold simultaneously:
-      - ADAS_LgtCtrl_Sts      = 3 (Active)
-      - ADAS_LgtCtrl_StsVld   = 1 (Valid)
-      - ADAS_LgtCtrl_Typ      = TJA/ICA (= value 2, ACC_Stop_and_Go — the only Typ that
-                                is a superset of plain ACC with stop-and-go capability)
-      - ADAS_LgtCtrl_AccelVld = 1 (Valid, on 0x121)
-      - ADAS_LgtCtrl_AccelReq within the accepted range (deeper decel gets clamped)
-
-    On-vehicle testing with Typ=1 (plain ACC) confirmed the VCU accepted the POSITIVE
-    portion of AccelReq (motor torque add) but silently ignored negatives — the wrong
-    Typ blocks the decel path.
-
-    ADAS_ISA_CutOffReq is left at 0 here.  It's the entry point of a different mechanism
-    (Speed Limit control via ISA subsystem), not the ACC path.
-
-    All Vld fields default to 1 (Valid) so the ESP does not treat us as an uninitialized
-    module."""
+  def create_long_status(self, drvr_override: bool, isa_spd_lmt: int, counter: int):
+    """ADAS_0x117 — long-control status, 10 ms cycle (plain E2E). Sent only while openpilot
+    drives longitudinal, as the stock module's ACC-Active frame: Sts=Active, Typ=ACC (plain
+    ACC; the stock module never sends ACC_Stop_and_Go in any log and its requests of -0.85 m/s2
+    under Typ=ACC were followed by the car). The HAP emergency-standstill/EPB valid fields are
+    Initializing (0) on the stock frame. `isa_spd_lmt` is the stock module's own value, relayed
+    from its last bus-2 frame (the ISA cut-off request stays 0, so it isn't acted on)."""
     values = {
-      "ADAS_LgtCtrl_Sts": 3 if long_active else 0,        # 3=Active, 0=Off
-      "ADAS_LgtCtrl_StsVld": 1,                            # 1=Valid
+      "ADAS_LgtCtrl_Sts": 3,                               # 3=Active
+      "ADAS_LgtCtrl_StsVld": 1,
       "ADAS_LgtCtrl_DrvrOvrdSts": int(drvr_override),
-      "ADAS_LgtCtrl_DrvrOvrdVld": 1,                       # 1=Valid
-      "ADAS_LgtCtrl_Typ": 2 if long_active else 0,         # 2=ACC_Stop_and_Go (=TJA/ICA)
-      "ADAS_ISA_CutOffReq": 0,                             # ISA mechanism, not ACC path
-      "ADAS_ISA_CutOffReqVld": 1,                          # 1=Valid
-      "ADAS_HAP_EmgyStandstillReq": 0,                     # no emergency standstill
-      "ADAS_HAP_EmgyStandstillVld": 1,                     # value is valid (=No_request)
-      "ADAS_HAP_EmgyEPBVld": 1,
+      "ADAS_LgtCtrl_DrvrOvrdVld": 1,
+      "ADAS_LgtCtrl_Typ": 1,                               # 1=ACC
+      "ADAS_ISA_CutOffReq": 0,
+      "ADAS_ISA_CutOffReqVld": 1,
+      "ADAS_HAP_EmgyStandstillReq": 0,
+      "ADAS_HAP_EmgyStandstillVld": 0,                     # stock: Initializing
+      "ADAS_HAP_EmgyEPBVld": 0,                            # stock: Initializing
       "ADAS_ParkStandstillReq": 0,
       "ADAS_ParkStandstillVld": 1,
-      "ADAS_ParkGearReq": gear_req & 0xF,
+      "ADAS_ParkGearReq": 0,
       "ADAS_ParkGearReqVld": 1,
+      "ADAS_ISA_SpdLmt_VCU": isa_spd_lmt & 0xFF,
+      "ADAS_117_Rsv_B5_5": 1,
+      "ADAS_117_Rsv_B5_7": 1,
+      "ADAS_117_Rsv_B6": 0xFF,
       "ADAS_117_AliveCounter": counter & 0xF,
       "ADAS_117_CheckSum": 0,
     }
@@ -169,29 +167,29 @@ class FiskerCAN:
     chk = fisker_plain_checksum(addr, data)
     return addr, bytes([chk]) + data[1:], bus
 
-  def create_long_esp_handshake(self, long_active: bool, drvr_override: bool, counter: int):
-    """ADAS_0x118 — ESP/long handshake, 10 ms cycle (plain E2E).
-    Same Sts=3(Active) fix as 0x117 (was 1=Reserved). All Vld fields set to 1(Valid) so
-    the ESP considers each optional request signal explicitly present as No_request rather
-    than 'value uninitialized, ignore me'. Braking authorization on this trim is done
-    entirely VCU-side (motor torque cut via ADAS_ISA_CutOffReq on 0x117); we intentionally
-    do NOT assert JerkReq / BrkPrefillReq / HBAReq / AEB here to keep hydraulic brakes out
-    of the loop."""
+  def create_long_esp_handshake(self, counter: int):
+    """ADAS_0x118 — ESP handshake, 10 ms cycle (plain E2E). The stock frame during ACC is the
+    same as in standby: ESP_Sts Off, every request No_request and every field Valid. ACC braking
+    here is VCU-side; none of the ESP requests (jerk, prefill, HBA, AEB) are ever asserted by
+    openpilot. AEB_DecelReq idles at the stock +0.1 m/s2 (raw 0x80D2), NOT raw 0 = -16 m/s2."""
     values = {
-      "ADAS_LgtCtrl_ESP_Sts": 3 if long_active else 0,     # 3=Active, 0=Off
-      "ADAS_LgtCtrl_ESP_Vld": 1,                            # 1=Valid
-      "ADAS_ESP_DrvrOvrdSts": int(drvr_override),
+      "ADAS_LgtCtrl_ESP_Sts": 0,
+      "ADAS_LgtCtrl_ESP_Vld": 1,
+      "ADAS_ESP_DrvrOvrdSts": 0,
       "ADAS_ESP_DrvrOvrdVld": 1,
-      "ADAS_HBAReq": 0,                                     # no HBA request
+      "ADAS_HBAReq": 0,
       "ADAS_HBAVld": 1,
       "ADAS_ESP_StandstillReq": 0,
       "ADAS_ESP_StandstillVld": 1,
-      "ADAS_JerkReq": 0,                                    # no ESP-side brake authorization
+      "ADAS_JerkReq": 0,
       "ADAS_JerkReqVld": 1,
-      "ADAS_BrkPrefillReq": 0,                              # no hydraulic-brake prefill
+      "ADAS_BrkPrefillReq": 0,
       "ADAS_BrkPrefillVld": 1,
-      "ADAS_AEB_ActvTyp": 0,                                # no AEB active
+      "ADAS_AEB_ActvTyp": 0,
       "ADAS_AEB_DecelVld": 1,
+      "ADAS_AEB_DecelReq": AEB_DECEL_IDLE,
+      "ADAS_118_Rsv_B1": 0xF,
+      "ADAS_118_Rsv_B5": 3,
       "ADAS_118_AliveCounter": counter & 0xF,
       "ADAS_118_CheckSum": 0,
     }
