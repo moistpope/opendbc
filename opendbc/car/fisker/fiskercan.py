@@ -18,7 +18,7 @@ opendbc.car.fisker.secoc.stamp_secoc.
 """
 
 from opendbc.can import CANPacker
-from opendbc.car.fisker.values import CANBUS, ICC_0x35B_OVERRIDES, ICC_SETTINGS_OVERRIDES
+from opendbc.car.fisker.values import CANBUS, ICC_0x35B_OVERRIDES, ICC_SETTINGS_OVERRIDES, RELAY_CTRL_ADDR
 
 # Per-address (data_id, length_bits) pair used by the plain-CRC checksum below.
 E2E_PARAMS: dict[int, tuple[int, int]] = {
@@ -35,10 +35,6 @@ E2E_PARAMS: dict[int, tuple[int, int]] = {
   0x31A: (55, 64),    # ADAS AEB / telltale
   0x52A: (0xF5, 64),  # ICC feature settings (verified against logged ICC frames)
 }
-
-
-# ADAS_0x118 AEB_DecelReq the stock module idles at: raw 0x80D2.
-AEB_DECEL_IDLE = 0x80D2 * 0.0004882 - 16
 
 
 def fisker_plain_checksum(addr: int, data: bytes) -> int:
@@ -112,11 +108,11 @@ class FiskerCAN:
     chk = fisker_plain_checksum(addr, data)
     return addr, bytes([chk]) + data[1:], bus
 
-  # The three longitudinal messages below are built to match the stock ADAS module's frames
-  # byte for byte while its ACC is Active (checked against recorded drives, see
-  # tests/test_long_frames.py). openpilot replaces all three while it controls longitudinal and
-  # panda blocks the stock ones, so the VCU/ESP see one source. The all-ones fill in bits the
-  # DBC doesn't define is what the stock module sends; the receivers' E2E CRC covers it.
+  # 0x121 is built to match the stock ADAS module's frame byte for byte while its ACC is Active (checked
+  # against recorded drives, see tests/test_long_frames.py). openpilot replaces it while it drives and panda
+  # blocks the stock one. The all-ones fill in bits the DBC doesn't define is what the stock module sends;
+  # the receivers' E2E CRC covers it. The stock 0x117/0x118 are never replaced: they already say
+  # "ACC Active" while the stock ACC is engaged, and engagement follows 0x313.
 
   def create_accel_command(self, accel: float, counter: int):
     """ADAS_0x121 — longitudinal accel request, 10 ms cycle. SecOC-protected (tail stamped by
@@ -134,68 +130,11 @@ class FiskerCAN:
     data = bytes([chk]) + data[1:]
     return addr, data, bus
 
-  def create_long_status(self, drvr_override: bool, isa_spd_lmt: int, counter: int):
-    """ADAS_0x117 — long-control status, 10 ms cycle (plain E2E). Sent only while openpilot
-    drives longitudinal, as the stock module's ACC-Active frame: Sts=Active, Typ=ACC (plain
-    ACC; the stock module never sends ACC_Stop_and_Go in any log and its requests of -0.85 m/s2
-    under Typ=ACC were followed by the car). The HAP emergency-standstill/EPB valid fields are
-    Initializing (0) on the stock frame. `isa_spd_lmt` is the stock module's own value, relayed
-    from its last bus-2 frame (the ISA cut-off request stays 0, so it isn't acted on)."""
-    values = {
-      "ADAS_LgtCtrl_Sts": 3,                               # 3=Active
-      "ADAS_LgtCtrl_StsVld": 1,
-      "ADAS_LgtCtrl_DrvrOvrdSts": int(drvr_override),
-      "ADAS_LgtCtrl_DrvrOvrdVld": 1,
-      "ADAS_LgtCtrl_Typ": 1,                               # 1=ACC
-      "ADAS_ISA_CutOffReq": 0,
-      "ADAS_ISA_CutOffReqVld": 1,
-      "ADAS_HAP_EmgyStandstillReq": 0,
-      "ADAS_HAP_EmgyStandstillVld": 0,                     # stock: Initializing
-      "ADAS_HAP_EmgyEPBVld": 0,                            # stock: Initializing
-      "ADAS_ParkStandstillReq": 0,
-      "ADAS_ParkStandstillVld": 1,
-      "ADAS_ParkGearReq": 0,
-      "ADAS_ParkGearReqVld": 1,
-      "ADAS_ISA_SpdLmt_VCU": isa_spd_lmt & 0xFF,
-      "ADAS_117_Rsv_B5_5": 1,
-      "ADAS_117_Rsv_B5_7": 1,
-      "ADAS_117_Rsv_B6": 0xFF,
-      "ADAS_117_AliveCounter": counter & 0xF,
-      "ADAS_117_CheckSum": 0,
-    }
-    addr, data, bus = self.packer.make_can_msg("ADAS_0x117", CANBUS.pt, values)
-    chk = fisker_plain_checksum(addr, data)
-    return addr, bytes([chk]) + data[1:], bus
-
-  def create_long_esp_handshake(self, counter: int):
-    """ADAS_0x118 — ESP handshake, 10 ms cycle (plain E2E). The stock frame during ACC is the
-    same as in standby: ESP_Sts Off, every request No_request and every field Valid. ACC braking
-    here is VCU-side; none of the ESP requests (jerk, prefill, HBA, AEB) are ever asserted by
-    openpilot. AEB_DecelReq idles at the stock +0.1 m/s2 (raw 0x80D2), NOT raw 0 = -16 m/s2."""
-    values = {
-      "ADAS_LgtCtrl_ESP_Sts": 0,
-      "ADAS_LgtCtrl_ESP_Vld": 1,
-      "ADAS_ESP_DrvrOvrdSts": 0,
-      "ADAS_ESP_DrvrOvrdVld": 1,
-      "ADAS_HBAReq": 0,
-      "ADAS_HBAVld": 1,
-      "ADAS_ESP_StandstillReq": 0,
-      "ADAS_ESP_StandstillVld": 1,
-      "ADAS_JerkReq": 0,
-      "ADAS_JerkReqVld": 1,
-      "ADAS_BrkPrefillReq": 0,
-      "ADAS_BrkPrefillVld": 1,
-      "ADAS_AEB_ActvTyp": 0,
-      "ADAS_AEB_DecelVld": 1,
-      "ADAS_AEB_DecelReq": AEB_DECEL_IDLE,
-      "ADAS_118_Rsv_B1": 0xF,
-      "ADAS_118_Rsv_B5": 3,
-      "ADAS_118_AliveCounter": counter & 0xF,
-      "ADAS_118_CheckSum": 0,
-    }
-    addr, data, bus = self.packer.make_can_msg("ADAS_0x118", CANBUS.pt, values)
-    chk = fisker_plain_checksum(addr, data)
-    return addr, bytes([chk]) + data[1:], bus
+  def create_relay_release(self, mask: int):
+    """Release request for panda's relay arbiter (see fisker.h): hands the relays in `mask` back to the
+    stock ADAS stream at exactly our last counter + 1. A pseudo address with no car message; panda
+    consumes it and rejects it, so it never reaches the vehicle bus."""
+    return RELAY_CTRL_ADDR, bytes([mask & 0xFF]) + bytes(7), CANBUS.pt
 
   # ---- ADAS module side (Bus.cam) --------------------------------------------
 

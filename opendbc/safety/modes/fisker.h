@@ -11,8 +11,7 @@
 //   TX  0x1D0  ADAS_LatCtrl_SteerAnReq    steering angle (SecOC)
 //   TX  0x1C0  ADAS_LatCtrl activation    plain E2E, lateral activation/status
 //   TX  0x121  ADAS_LgtCtrl_AccelReq      accel (SecOC, longitudinal only)
-//   TX  0x117  ADAS long control status   plain E2E; longitudinal only, replaces the stock frame
-//   TX  0x118  ADAS long/ESP handshake    plain E2E; longitudinal only, no ESP/AEB requests allowed
+//   TX  0x5FE  relay release request      consumed and rejected here, never transmitted — see below
 //   TX  0x52A  ICC feature settings       bus 2 (to the ADAS module), plain E2E — see below
 //   TX  0x35B  ICC SVS/BSD/APA settings   bus 2 (to the ADAS module), no E2E — optional relay
 //   RX  0x115  wheel speeds -> vehicle_moving
@@ -52,8 +51,128 @@ static bool fisker_icc_relay_active(uint32_t tx_last) {
 #define FISKER_ACCEL_MIN      25604  // -3.5 m/s^2
 
 // Most Ocean messages carry a 4-bit AliveCounter in byte 1 bits 8..11.
+// The AliveCounter is the low nibble of byte 1 (DBC: start bit 11, 4 bits), 0..14.
 static uint8_t fisker_get_counter(const CANPacket_t *msg) {
-  return (msg->data[1] >> 4) & 0x0FU;
+  return msg->data[1] & 0x0FU;
+}
+
+// ---- Relay arbiter -----------------------------------------------------------------------------
+// openpilot replaces three stock ADAS messages while it drives: 0x1D0 (steering angle), 0x1C0
+// (lateral activation) and, with the long flag, 0x121 (accel). For each one panda decides who
+// reaches the vehicle bus from what it actually observes (our TX arriving, the stock RX), never
+// from a flag that lags:
+//   PASS       stock frames are forwarded.
+//   TAKEN      our copies are flowing; stock frames are blocked. If ours stop for
+//              FISKER_RELAY_FAIL_US the stock stream returns by itself (fail-safe).
+//   RELEASING  openpilot is handing back (release frame, or cruise dropped for 0x121). Ours are
+//              rejected so our last counter freezes, and the stock stream resumes at the first frame
+//              whose counter continues ours (or is at most 3 ahead), so the receivers see a strictly
+//              +1 counter sequence with, at worst, a short timing gap.
+// Counters are the shared 0..14 alive counter. The forward decision runs before the RX hook for the
+// same frame (panda/board/drivers/fdcan.h) and sees no data, so it works from the previous stock
+// frame's counter: the frame being decided is oem_ctr + 1.
+#define FISKER_RELAY_FAIL_US     50000U
+#define FISKER_RELAY_CTRL_ADDR   0x5FEU   // pseudo address, no car message; byte 0 = bitmask of relays to release
+#define FISKER_RELAY_TAKE_WINDOW 3U       // first frame of ours may be at most this far ahead of the stock counter
+#define FISKER_RELAY_RESUME_JUMP 3U       // stock resumes at most this far ahead of our last counter
+
+typedef enum { FISKER_RELAY_PASS = 0, FISKER_RELAY_TAKEN, FISKER_RELAY_RELEASING } fisker_relay_state_t;
+
+typedef struct {
+  uint32_t addr;
+  uint8_t release_bit;          // bit in the release frame's first byte
+  fisker_relay_state_t state;
+  bool oem_seen;
+  uint8_t oem_ctr;              // last stock counter received on bus 2
+  uint8_t ours_ctr;             // counter of our last accepted frame
+  uint32_t ours_ts;             // when it was accepted
+} fisker_relay_t;
+
+#define FISKER_NUM_RELAYS 3
+static fisker_relay_t fisker_relays[FISKER_NUM_RELAYS] = {
+  {.addr = 0x1D0U, .release_bit = 0x01U},
+  {.addr = 0x1C0U, .release_bit = 0x02U},
+  {.addr = 0x121U, .release_bit = 0x04U},
+};
+
+static void fisker_relays_reset(void) {
+  for (int i = 0; i < FISKER_NUM_RELAYS; i++) {
+    fisker_relays[i].state = FISKER_RELAY_PASS;
+    fisker_relays[i].oem_seen = false;
+    fisker_relays[i].oem_ctr = 0U;
+    fisker_relays[i].ours_ctr = 0U;
+    fisker_relays[i].ours_ts = 0U;
+  }
+}
+
+static fisker_relay_t *fisker_relay_get(uint32_t addr) {
+  fisker_relay_t *ret = NULL;
+  for (int i = 0; i < FISKER_NUM_RELAYS; i++) {
+    if (fisker_relays[i].addr == addr) {
+      ret = &fisker_relays[i];
+    }
+  }
+  return ret;
+}
+
+// a - b on the 0..14 alive counter
+static uint8_t fisker_ctr_diff(uint8_t a, uint8_t b) {
+  return (uint8_t)(((uint32_t)a + 15U - (uint32_t)b) % 15U);
+}
+
+// Applied lazily so every path that drops controls_allowed (brake, cruise state, heartbeat, lag) hands 0x121 back.
+static void fisker_relay_check_long(fisker_relay_t *r) {
+  if ((r->addr == 0x121U) && (r->state == FISKER_RELAY_TAKEN) && !controls_allowed) {
+    r->state = FISKER_RELAY_RELEASING;
+  }
+}
+
+// Fail-safe: ours stopped without a release request.
+static void fisker_relay_check_failsafe(fisker_relay_t *r) {
+  if ((r->state != FISKER_RELAY_PASS) && (safety_get_ts_elapsed(microsecond_timer_get(), r->ours_ts) > FISKER_RELAY_FAIL_US)) {
+    r->state = FISKER_RELAY_PASS;
+  }
+}
+
+// True if the stock frame being decided (counter oem_ctr + 1) is blocked.
+static bool fisker_relay_blocks_stock(fisker_relay_t *r) {
+  fisker_relay_check_long(r);
+  fisker_relay_check_failsafe(r);
+  if ((r->state == FISKER_RELAY_RELEASING) && r->oem_seen &&
+      (fisker_ctr_diff(r->oem_ctr, r->ours_ctr) <= FISKER_RELAY_RESUME_JUMP)) {
+    r->state = FISKER_RELAY_PASS;
+  }
+  return r->state != FISKER_RELAY_PASS;
+}
+
+// True if our frame with counter n is accepted; updates the relay state.
+static bool fisker_relay_accept_ours(fisker_relay_t *r, uint8_t n) {
+  fisker_relay_check_long(r);
+  fisker_relay_check_failsafe(r);
+  bool ok = false;
+  if (n < 15U) {
+    if (r->state == FISKER_RELAY_PASS) {
+      // taking over: must continue the stock counter (a repeat of the last stock frame or up to 3 ahead)
+      // Only with permission: cruise for accel, cruise or MADS for steering. Without it the stock
+      // frames keep flowing even if something sends.
+      bool may_take = (r->addr == 0x121U) ? controls_allowed : (controls_allowed || controls_allowed_lateral);
+      if (may_take && (!r->oem_seen || (fisker_ctr_diff(n, r->oem_ctr) <= FISKER_RELAY_TAKE_WINDOW))) {
+        r->state = FISKER_RELAY_TAKEN;
+        ok = true;
+      }
+    } else if (r->state == FISKER_RELAY_TAKEN) {
+      // strictly forward, never a repeat or a step back
+      uint8_t d = fisker_ctr_diff(n, r->ours_ctr);
+      ok = (d >= 1U) && (d <= 3U);
+    } else {
+      // RELEASING: frozen
+    }
+  }
+  if (ok) {
+    r->ours_ctr = n;
+    r->ours_ts = microsecond_timer_get();
+  }
+  return ok;
 }
 
 
@@ -96,6 +215,13 @@ static void fisker_rx_hook(const CANPacket_t *msg) {
   }
 
   if (msg->bus == 2U) {
+    // Stock counters of the relayed messages (see the relay arbiter above).
+    fisker_relay_t *relay = fisker_relay_get(msg->addr);
+    if (relay != NULL) {
+      relay->oem_ctr = fisker_get_counter(msg);
+      relay->oem_seen = true;
+    }
+
     // ADAS_0x313: ACC state (ADAS_Sts_ACC_ICC, 4-bit @ start 35 -> data[4] low nibble),
     // authored by the ADAS module on the cam side. ACC is enabled via the 0x52A ICC-settings
     // override, so this is the cruise source. Engaged = 3=Active, 4=Override,
@@ -196,27 +322,25 @@ static bool fisker_tx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // Long status (0x117): openpilot never requests an EPB apply, a standstill hold, a gear change
-  // or a motor cut-off. HAP_EmgyStandstillReq @ 28 / ParkStandstillReq @ 29 -> data[3] bits 4, 5;
-  // ParkGearReq @ 35 (4 bits) -> data[4] low nibble; HAP_EmgyEPBReq @ 44 / ISA_CutOffReq @ 46 ->
-  // data[5] bits 4, 6.
-  if (msg->addr == 0x117U) {
-    bool unwanted = ((msg->data[3] & 0x30U) != 0U) || ((msg->data[4] & 0x0FU) != 0U) || ((msg->data[5] & 0x50U) != 0U);
-    if (unwanted) {
-      tx = false;
+  // Relay arbiter: our 0x1D0/0x1C0 (and 0x121 with the long flag) must continue the stock counter
+  // sequence; a frame that would repeat, step back or jump is rejected here, so the vehicle bus
+  // can never see our counter go wrong. Only checked once the signal-level checks above passed.
+  if (tx) {
+    fisker_relay_t *relay = fisker_relay_get(msg->addr);
+    if ((relay != NULL) && ((msg->addr != 0x121U) || fisker_longitudinal)) {
+      tx = fisker_relay_accept_ours(relay, fisker_get_counter(msg));
     }
   }
 
-  // ESP handshake (0x118). Longitudinal control only needs the stock idle values here; refuse any
-  // frame asserting an AEB request (ADAS_AEB_ActvTyp, 4 bits @ 43 -> data[5] low nibble) or an
-  // ESP-side brake request (HBAReq data[3] bits 2..0, JerkReq data[4] bits 1..0,
-  // BrkPrefillReq data[4] bits 5..4), so a bug can't command hydraulic braking.
-  if (msg->addr == 0x118U) {
-    bool esp_request = ((msg->data[5] & 0x0FU) != 0U) || ((msg->data[3] & 0x07U) != 0U) ||
-                       ((msg->data[4] & 0x03U) != 0U) || (((msg->data[4] >> 4) & 0x03U) != 0U);
-    if (esp_request) {
-      tx = false;
+  // Release request: the Comma is handing these relays back (byte 0 = bitmask of release bits). It
+  // is consumed here and rejected, so it never reaches the car.
+  if (msg->addr == FISKER_RELAY_CTRL_ADDR) {
+    for (int i = 0; i < FISKER_NUM_RELAYS; i++) {
+      if (((msg->data[0] & fisker_relays[i].release_bit) != 0U) && (fisker_relays[i].state == FISKER_RELAY_TAKEN)) {
+        fisker_relays[i].state = FISKER_RELAY_RELEASING;
+      }
     }
+    tx = false;
   }
 
   // ICC feature settings (0x52A, bus 2): remember when openpilot last sent one so the fwd hook
@@ -245,6 +369,7 @@ static safety_config fisker_init(uint16_t param) {
   static const CanMsg FISKER_TX_MSGS[] = {
     {0x1D0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // steering angle
     {0x1C0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // lateral activation
+    {FISKER_RELAY_CTRL_ADDR, 0, 8, .check_relay = false},                   // relay release request (never sent)
     {0x52A, 2, 8, .check_relay = false},                                    // ICC feature settings
     {0x35B, 2, 8, .check_relay = false},                                    // ICC SVS/BSD/APA settings
   };
@@ -252,8 +377,7 @@ static safety_config fisker_init(uint16_t param) {
     {0x1D0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // steering angle
     {0x1C0, 0, 8, .check_relay = true, .disable_static_blocking = true},    // lateral activation
     {0x121, 0, 8, .check_relay = true, .disable_static_blocking = true},    // accel (op long only)
-    {0x117, 0, 8, .check_relay = true, .disable_static_blocking = true},    // long control status
-    {0x118, 0, 8, .check_relay = true, .disable_static_blocking = true},    // long/ESP handshake
+    {FISKER_RELAY_CTRL_ADDR, 0, 8, .check_relay = false},                   // relay release request (never sent)
     {0x52A, 2, 8, .check_relay = false},                                    // ICC feature settings
     {0x35B, 2, 8, .check_relay = false},                                    // ICC SVS/BSD/APA settings
   };
@@ -264,6 +388,10 @@ static safety_config fisker_init(uint16_t param) {
     {.msg = {{0x1C2, 0, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // steering angle
     {.msg = {{0x1C4, 0, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // driver torque
     {.msg = {{0x313, 2, 8,  50U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // ADAS ACC state
+    // Stock steering/long commands on bus 2, for the relay arbiter's stock counters.
+    {.msg = {{0x1D0, 2, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // stock steering angle
+    {.msg = {{0x1C0, 2, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // stock lateral activation
+    {.msg = {{0x121, 2, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // stock accel
     // MFS_0x514 (MFSS buttons) whitelisted so our fisker_rx_hook actually runs on it —
     // the safety framework gates rx_hook execution on rx_checks membership. Without this,
     // our MFS_RiBtnSouth read in the rx hook was dead code and mads_button_press never
@@ -273,13 +401,14 @@ static safety_config fisker_init(uint16_t param) {
 
   // Fisker on-vehicle bring-up: honor the LONG_CONTROL bit on release too. Stock openpilot
   // hides longitudinal behind ALLOW_DEBUG for release builds, but this is a personal test
-  // fork and we need the flag to work so alpha_long can gate 0x121/0x117/0x118 in this
+  // fork and we need the flag to work so alpha_long can gate 0x121 in this
   // firmware (release-tizi panda is not built with ALLOW_DEBUG). openpilot still gates
   // openpilotLongitudinalControl behind AlphaLongitudinalEnabled, so this is only reachable
   // by an explicit developer opt-in.
   const uint16_t FISKER_FLAG_LONGITUDINAL_CONTROL = 1;
   fisker_longitudinal = GET_FLAG(param, FISKER_FLAG_LONGITUDINAL_CONTROL);
 
+  fisker_relays_reset();
   fisker_icc_settings_tx_last = microsecond_timer_get();
   fisker_icc_0x35b_tx_seen = false;
   fisker_icc_0x35b_tx_last = 0U;
@@ -305,19 +434,14 @@ static bool fisker_fwd_hook(int bus_num, int addr) {
     block_msg = fisker_icc_0x35b_tx_seen && fisker_icc_relay_active(fisker_icc_0x35b_tx_last);
   }
   if (bus_num == 2) {
-    // steering angle (0x1D0) + lateral activation (0x1C0): openpilot replaces both while
-    // engaged (cruise or MADS-only), so block the OEM's from reaching the vehicle;
-    // forward them when disengaged.
-    if (((addr == 0x1D0) || (addr == 0x1C0)) && (controls_allowed || controls_allowed_lateral)) {
-      block_msg = true;
-    }
-    // Longitudinal (0x121 accel, 0x117 status, 0x118 ESP handshake) is unaffected by MADS, which
-    // is lateral-only. While cruise is engaged and openpilot drives longitudinal it replaces all
-    // three, so the stock module's must be blocked: the receivers' E2E counters tolerate one
-    // sender, not two interleaved. (Blocking only 0x121 left the stock 0x117/0x118 flowing next to
-    // ours.) Stock frames take over again as soon as controls_allowed drops.
-    if (fisker_longitudinal && controls_allowed && ((addr == 0x121) || (addr == 0x117) || (addr == 0x118))) {
-      block_msg = true;
+    // Steering angle (0x1D0), lateral activation (0x1C0) and, with the long flag, accel (0x121):
+    // the relay arbiter blocks the stock frame only while openpilot's copies are actually flowing
+    // (see the arbiter above). The old rule keyed on controls_allowed_lateral, which only drops on a
+    // 1 Hz heartbeat mismatch, so it kept blocking the stock stream for 1-3 s after openpilot had
+    // stopped sending and starved the EPS.
+    fisker_relay_t *relay = fisker_relay_get((uint32_t)addr);
+    if ((relay != NULL) && ((addr != 0x121) || fisker_longitudinal)) {
+      block_msg = fisker_relay_blocks_stock(relay);
     }
   }
   return block_msg;

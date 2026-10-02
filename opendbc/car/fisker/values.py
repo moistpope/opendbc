@@ -45,6 +45,14 @@ class CAR(Platforms):
   )
 
 
+# Panda relay arbiter (safety/modes/fisker.h): the Comma hands a replaced stock message back with a
+# release frame, a pseudo address panda consumes and rejects (it never reaches the car). Byte 0 is a
+# bitmask of the relays to hand back. Keep in step with fisker.h (tests/test_relay_consts.py).
+RELAY_CTRL_ADDR = 0x5FE
+RELAY_RELEASE_STEER_LAT = 0x03   # 0x1D0 + 0x1C0
+RELAY_RELEASE_ACCEL = 0x04       # 0x121
+
+
 class CANBUS:
   # Camera-splice harness: panda sits between the vehicle-side gateway (bus 0) and the
   # OEM ADAS module (bus 2). Bus 1 is the mid-range radar's private link, when the harness

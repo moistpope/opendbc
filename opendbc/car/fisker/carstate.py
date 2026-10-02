@@ -64,18 +64,9 @@ class CarState(CarStateBase):
     self.secoc_sync_mac = b"\x00\x00\x00"
     self.secoc_sync_seen = False
 
-    # OEM ADAS's own counters on 0x1D0 / 0x1C0, snapshotted from bus 2 (cam-side of the
-    # camera splice). The EPS validates our re-engage frames against its "last accepted
-    # counter + 1" rule — if we transmit a value that isn't OEM_last + 1, EPS rejects and
-    # latches an LKA fault. Feeding OEM's latest AliveCounter into our carcontroller lets
-    # us seed our tx counter to (OEM + 1) at every engagement transition so hand-offs are
-    # seamless (see fisker/carcontroller.py). SecOC wire byte is only 6 bits of the full
-    # msg_counter; enough to align lower bits at engage.
-    self.oem_1d0_alive = 0
-    self.oem_1c0_alive = 0
-    self.oem_1d0_secoc_wire_ctr = 0    # (byte >> 2) & 0x3F — lower 6 bits of msg_counter
-    # ISA speed limit the stock ADAS module reports in 0x117; relayed in ours (carcontroller).
-    self.oem_isa_spd_lmt = 0
+    # Every stock 0x1D0 frame received on bus 2 since the last update, decoded, oldest first. The
+    # relay (relay.py) sends one set of frames per stock frame with counters continuing the stock ones.
+    self.oem_frames: list[dict[str, float]] = []
 
     # Every ICC_0x52A frame received on bus 0 since the last update, decoded. Carcontroller
     # re-sends each one (with overrides) to the ADAS module on bus 2 — see create_icc_settings.
@@ -221,17 +212,9 @@ class CarState(CarStateBase):
     # ret.accFaulted = acc_state in (9, 10) or bool(cp_pt.vl["ESP_0x114"]["ESP_FltIndcn_AEB"])
 
     # ---- OEM ADAS lateral counters (bus 2, for takeover alignment) --------
-    # Snapshot the OEM ADAS's own AliveCounter and SSecOC_Fresh_Byte0 from bus 2. The
-    # EPS validates our re-engage frames against its last-accepted counter+1 rule — if
-    # we transmit anything else, EPS latches an LKA fault (surfaces as "ADAS error" on
-    # cluster and cruise fault in openpilot). Carcontroller reads these values and seeds
-    # our tx counters at every engagement transition so hand-off is seamless.
-    oem_1d0 = cp_cam.vl["ADAS_0x1D0"]
-    oem_1c0 = cp_cam.vl["ADAS_0x1C0"]
-    self.oem_1d0_alive = int(oem_1d0["ADAS_1D0_AliveCounter"])
-    self.oem_1c0_alive = int(oem_1c0["ADAS_1C0_AliveCounter"])
-    self.oem_1d0_secoc_wire_ctr = (int(oem_1d0["ADAS_1D0_SSecOC_Fresh_Byte0"]) >> 2) & 0x3F
-    self.oem_isa_spd_lmt = int(cp_cam.vl["ADAS_0x117"]["ADAS_ISA_SpdLmt_VCU"])
+    # The stock module's steering command, frame by frame (AliveCounter + SSecOC_Fresh_Byte0), for the
+    # relay clock. get_new_frames reads vl_all, so no frame is dropped or repeated.
+    self.oem_frames = get_new_frames(cp_cam, "ADAS_0x1D0")
 
     # ---- ICC frames relayed to the ADAS module by carcontroller ----
     # One re-sent frame per ICC frame, in order (0x52A keeps the ICC's counter this way).
@@ -295,13 +278,8 @@ class CarState(CarStateBase):
       ("ADAS_0x31C", 20),   # ADAS_AccTrgSpdDisp — ACC set speed
       ("ADAS_0x314", 50),   # BSDSts + LKA/ELKA state enums
       ("ADAS_0x315", 20),   # BSD_CID_{Le,Ri}DispReq — blind-spot alert
-      # OEM ADAS's lateral commands on bus 2 — we snapshot the AliveCounters and SecOC
-      # wire freshness byte so carcontroller can align its transmitted counters to what
-      # the EPS was tracking BEFORE the panda takeover blocked OEM's stream. Rejection on
-      # the very first re-engage frame is what surfaces as "ADAS error" on the cluster.
-      ("ADAS_0x1C0", 100),  # ADAS_1C0_AliveCounter
-      ("ADAS_0x1D0", 100),  # ADAS_1D0_AliveCounter + ADAS_1D0_SSecOC_Fresh_Byte0
-      ("ADAS_0x117", 100),  # ADAS_ISA_SpdLmt_VCU, relayed in our 0x117
+      # The stock steering command on bus 2: its AliveCounter and SecOC wire byte drive the relay clock.
+      ("ADAS_0x1D0", 100),
     ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_msgs, CANBUS.pt),
