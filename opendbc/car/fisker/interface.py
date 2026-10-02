@@ -2,12 +2,14 @@ from opendbc.car import get_safety_config, structs
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.fisker.carcontroller import CarController
 from opendbc.car.fisker.carstate import CarState
-from opendbc.car.fisker.values import FiskerSafetyFlags
+from opendbc.car.fisker.radar_interface import RADAR_HEADER, RadarInterface
+from opendbc.car.fisker.values import CANBUS, FiskerSafetyFlags
 
 
 class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
+  RadarInterface = RadarInterface
 
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw,
@@ -39,12 +41,11 @@ class CarInterface(CarInterfaceBase):
     ret.steerAtStandstill = True
     ret.minSteerSpeed = 0.0
 
-    # No usable radar. The ADAS module publishes a fused object list on ADASBUS
-    # (ADAS_Obj0..7, 0x32D-0x34F, 25 Hz) with position + class + a lead pointer,
-    # but NO relative velocity — and the raw radar tracks (with velocity) are on a
-    # private radar<->ADAS SecOC link we don't tap. openpilot needs dRel+vRel, so
-    # longitudinal uses vision-based lead detection (like Tesla), not radar.
-    ret.radarUnavailable = True
+    # The ADAS object list (ADAS_Obj0..7) has position + class but no relative velocity, so the
+    # radar tracks come from the mid-range radar's private link on bus 1 (RadarInterface). Without
+    # that tap (older harnesses/logs) bus 1 is silent and openpilot stays vision-only, like Tesla.
+    ret.radarUnavailable = RADAR_HEADER not in fingerprint[CANBUS.radar]
+    ret.radarDelay = 0.08   # measured -> published: radar MeasTime vs the cycle's last frame, median ~80 ms on bus 1
 
     # Lateral-only by default: openpilotLongitudinalControl stays False unless alpha_long
     # is enabled, and the fisker panda safety mode without the LONG flag has no accel

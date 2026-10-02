@@ -24,6 +24,8 @@ class FiskerPlatformConfig(PlatformConfig):
   # reference but is not wired into a CAN parser.
   dbc_dict: DbcDict = field(default_factory=lambda: {
     Bus.pt: 'fisker_ocean_adas',
+    # Mid-range radar private link, panda bus 1. Reverse-engineered; see the DBC's comments.
+    Bus.radar: 'fisker_ocean_mrr',
   })
 
 
@@ -45,12 +47,14 @@ class CAR(Platforms):
 
 class CANBUS:
   # Camera-splice harness: panda sits between the vehicle-side gateway (bus 0) and the
-  # OEM ADAS module (bus 2). Bus 1 is unused. Verified from a live fingerprint capture:
+  # OEM ADAS module (bus 2). Bus 1 is the mid-range radar's private link, when the harness
+  # taps it (see radar_interface.py). Verified from a live fingerprint capture:
   # bus 0 has 92 addresses (gateway-mirrored body/HMI + ESP/EPS/YRS/BCM/VCU/MFS/ICC),
   # bus 2 has ~65 addresses (all ADAS-authored: 0x117/0x118/0x121/0x1C0/0x1D0/0x313/
   # 0x314/0x315/0x316/0x317/0x31A/0x31C + ADAS radar object list 0x2C7..0x2E9).
   pt = 0           # ADASBUS, vehicle side (CAN-FD)
   cam = 2          # ADASBUS, OEM ADAS module side (CAN-FD)
+  radar = 1        # MRR private link (CAN-FD), receive only: safety never forwards or sends on it
 
 
 # VCU_GearSig enum (from DBC VAL_): 1=P, 2=N, 3=R, 4=D, 6=E, 7=S
