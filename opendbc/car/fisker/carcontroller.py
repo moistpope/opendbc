@@ -245,10 +245,6 @@ class CarController(CarControllerBase):
     # changes it didn't ask for.
     if lat_engaged:
       self.lat_fade_remaining = self.FADE_TICKS
-    elif self.was_lat_engaged_prev:
-      # Falling edge: fade timer was already reset above on rising, now kick it off
-      # (it was reset to FADE_TICKS during the last engaged tick, so no reset needed).
-      pass
     self.was_lat_engaged_prev = lat_engaged
     tx_lateral = lat_engaged or (self.lat_fade_remaining > 0)
     if not lat_engaged and self.lat_fade_remaining > 0:
