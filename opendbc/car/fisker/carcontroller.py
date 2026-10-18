@@ -19,6 +19,16 @@ STEER_CAN_ID = 0x1D0
 ACCEL_CAN_ID = 0x121
 
 
+def apply_fisker_steer_angle_limits(desired_angle, last_angle, speed, measured_angle, lat_active, controls_permitted):
+  # Req=0 releases the EPS, but Panda still rate-checks 0x1D0 while ACC/MADS permits
+  # control. Follow the driver's measured angle at the normal rate instead of
+  # snapping to it and dropping frames at Panda. With both permissions off, Panda
+  # requires a measured-angle heartbeat instead.
+  target = desired_angle if lat_active else measured_angle
+  return apply_std_steer_angle_limits(target, last_angle, speed, measured_angle,
+                                     controls_permitted, CarControllerParams.ANGLE_LIMITS)
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP, CP_SP):
     super().__init__(dbc_names, CP, CP_SP)
@@ -170,9 +180,9 @@ class CarController(CarControllerBase):
     engaged = (CS.out.cruiseState.enabled or mads_active) and secoc_ok
     lat_engaged = mads_active and secoc_ok
     lat_active = CC.latActive and secoc_ok and not CS.driver_intervening
-    self.apply_angle_last = apply_std_steer_angle_limits(
+    self.apply_angle_last = apply_fisker_steer_angle_limits(
       actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw,
-      CS.out.steeringAngleDeg, lat_active, self.params.ANGLE_LIMITS,
+      CS.out.steeringAngleDeg, lat_active, engaged,
     )
 
     # "We ARE OEM" AliveCounter substitution — seed once from OEM at engage, then
@@ -262,9 +272,9 @@ class CarController(CarControllerBase):
       lat_ctrl_typ = 3 if (self.CP_SP.flags & FiskerFlagsSP.LAT_CTRL_LCA.value) else 1
       # During the fade window lat_engaged is False → force the wire content to
       # inactive (Req=0, Sts=0, Typ=0) regardless of what CC.latActive says, so the
-      # EPS releases immediately. apply_angle_last was already mirrored to the measured
-      # angle up above (apply_std_steer_angle_limits with lat_active=False returns the
-      # measured angle), so 0x1D0 just carries the current wheel position.
+      # EPS is requested to release immediately. 0x1D0 follows the measured angle
+      # within Panda's rate limits if ACC still permits control; otherwise it carries
+      # the measured position directly. Req=0 must not wait for the angle to catch up.
       effective_lat_active = lat_active and lat_engaged
       steer_msg = self.fcan.create_steering_control(self.apply_angle_last, self.alive_1d0)
       can_sends.append(self._stamp(steer_msg, STEER_CAN_ID, trip, reset, self.secoc_window_ctr))
